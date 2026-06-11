@@ -36,6 +36,8 @@
           "alert_device_removed": "התראה: מכשיר נמחק מהרשת",
           "alert_bridge_offline": "התראה: רשת זיגבי נפלה",
           "alert_bridge_online": "התראה: רשת זיגבי חזרה",
+          "alert_device_not_in_ha": "התראה: מכשיר לא נמצא ב-Home Assistant (MQTT)",
+          "alert_device_ha_mismatch": "התראה: חוסר התאמה בין Z2M ל-Home Assistant",
           "silent_threshold_hours": "שעות שקט לפני דיווח על מכשיר",
           "telegram_cooldown_minutes": "דקות מינימום בין התראות זהות"
         }

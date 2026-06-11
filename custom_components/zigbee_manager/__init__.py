@@ -44,6 +44,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         data = hass.data[DOMAIN].pop(entry.entry_id, None)
         if data:
+            coordinator: ZigbeeManagerCoordinator = data["coordinator"]
+            coordinator.async_shutdown_ha_tracker()
             for unsub in data["unsubs"]:
                 unsub()
     return unload_ok

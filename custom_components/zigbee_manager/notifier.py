@@ -59,6 +59,8 @@ class TelegramNotifier:
         total: int,
         *,
         bridge_online: bool | None = None,
+        ha_active: int = 0,
+        ha_linked: int = 0,
     ) -> None:
         """Send a formatted alert message to the configured chat."""
         cfg = self._config()
@@ -71,6 +73,8 @@ class TelegramNotifier:
             active,
             total,
             bridge_online=bridge_online,
+            ha_active=ha_active,
+            ha_linked=ha_linked,
         )
         try:
             await self._hass.services.async_call(

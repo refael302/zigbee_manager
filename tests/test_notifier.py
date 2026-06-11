@@ -15,13 +15,18 @@ from zigbee_manager.const import (
 
 def test_format_alert_structure():
     msg = format_alert(
-        EVENT_DEVICE_UNAVAILABLE, "מכשיר my_plug (0x1) התנתק מהרשת", 18, 22
+        EVENT_DEVICE_UNAVAILABLE,
+        "מכשיר my_plug (0x1) התנתק מהרשת",
+        18,
+        22,
+        ha_active=17,
+        ha_linked=22,
     )
     lines = msg.split("\n")
     assert lines[0] == "מערכת ניהול זיגבי"
     assert lines[1] == "התראה: מכשיר התנתק מהרשת"
     assert lines[2] == "תיאור: מכשיר my_plug (0x1) התנתק מהרשת"
-    assert lines[3] == "סטטוס נוכחי: 18/22 מכשירים פעילים"
+    assert lines[3] == "סטטוס Z2M: 18/22 מכשירים פעילים"
 
 
 def test_format_alert_unknown_event_uses_raw_type():
@@ -62,12 +67,29 @@ def test_format_alert_bridge_offline_shows_zero_active():
         "גשר ה-Zigbee2MQTT הפסיק להגיב",
         0,
         56,
+        ha_active=52,
+        ha_linked=56,
     )
-    assert "סטטוס נוכחי: 0/56 מכשירים פעילים (גשר לא זמין)" in msg
+    assert "סטטוס Z2M: 0/56 מכשירים פעילים (גשר לא זמין)" in msg
+    assert "סטטוס HA: 52/56 מכשירים פעילים ב-MQTT" in msg
+
+
+def test_format_alert_dual_status():
+    msg = format_alert(
+        EVENT_DEVICE_UNAVAILABLE,
+        "desc",
+        50,
+        56,
+        ha_active=48,
+        ha_linked=55,
+    )
+    assert "סטטוס Z2M: 50/56" in msg
+    assert "סטטוס HA: 48/55" in msg
+    assert "(1 מכשירים ב-Z2M לא נמצאו ב-Home Assistant)" in msg
 
 
 def test_format_status_line_bridge_offline_no_devices():
     assert (
         format_status_line(0, 0, bridge_online=False)
-        == "סטטוס נוכחי: גשר לא זמין — אין מידע על מכשירים"
+        == "סטטוס Z2M: גשר לא זמין"
     )

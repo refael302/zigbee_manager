@@ -31,6 +31,9 @@ class DeviceState:
     availability: str = AVAILABILITY_UNKNOWN
     last_seen: datetime | None = None
     silent_alerted: bool = field(default=False, compare=False)
+    ha_linked: bool = False
+    ha_active: bool = False
+    ha_entity_count: int = 0
 
     @property
     def is_active(self) -> bool:
@@ -50,6 +53,9 @@ class DeviceState:
             "interview_state": self.interview_state,
             "availability": self.availability,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
+            "ha_linked": self.ha_linked,
+            "ha_active": self.ha_active,
+            "ha_entity_count": self.ha_entity_count,
         }
 
 
@@ -123,6 +129,9 @@ def merge_runtime_state(
         dev.availability = prev.availability
         dev.last_seen = prev.last_seen
         dev.silent_alerted = prev.silent_alerted
+        dev.ha_linked = prev.ha_linked
+        dev.ha_active = prev.ha_active
+        dev.ha_entity_count = prev.ha_entity_count
 
 
 def mark_all_offline(devices: dict[str, DeviceState]) -> None:

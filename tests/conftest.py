@@ -32,6 +32,7 @@ def _ensure_zigbee_manager_pkg() -> None:
     load_file("zigbee_manager.device_registry", zm_root / "device_registry.py")
     load_file("zigbee_manager.integration_log", zm_root / "integration_log.py")
     load_file("zigbee_manager.alert_format", zm_root / "alert_format.py")
+    load_file("zigbee_manager.ha_status", zm_root / "ha_status.py")
 
 
 _ensure_zigbee_manager_pkg()

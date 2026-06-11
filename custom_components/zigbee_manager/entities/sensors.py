@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from ..const import DOMAIN, LOG_STATE_MAX_LEN, NAME, REGISTRY_ATTR_DEVICE_LIMIT
 from ..coordinator import ZigbeeManagerCoordinator
+from ..ha_status import MISMATCH_NONE, classify_ha_mismatch
 
 
 async def async_setup_entry(
@@ -34,6 +35,7 @@ async def async_setup_entry(
         [
             TotalDevicesSensor(coordinator, entry),
             ActiveDevicesSensor(coordinator, entry),
+            ActiveDevicesHaSensor(coordinator, entry),
             DeviceRegistrySensor(coordinator, entry),
             BridgeUptimeSensor(coordinator, entry),
             SystemLogSensor(coordinator, entry),
@@ -101,7 +103,11 @@ class ActiveDevicesSensor(ZigbeeManagerSensorBase):
         self, coordinator: ZigbeeManagerCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(
-            coordinator, entry, "active_devices", "Active devices", "mdi:access-point"
+            coordinator,
+            entry,
+            "active_devices",
+            "Active devices (Z2M)",
+            "mdi:access-point",
         )
 
     @property
@@ -117,11 +123,67 @@ class ActiveDevicesSensor(ZigbeeManagerSensorBase):
             for dev in self.coordinator.devices.values()
             if not dev.is_active
         ]
+        ha_active = self.coordinator.ha_active_devices
+        ha_linked = self.coordinator.ha_linked_devices
         return {
             "total": total,
             "offline_devices": offline,
             "ratio": round(active / total, 3) if total else None,
             "bridge_online": self.coordinator.bridge_online,
+            "ha_active": ha_active,
+            "ha_linked": ha_linked,
+        }
+
+
+class ActiveDevicesHaSensor(ZigbeeManagerSensorBase):
+    """Devices with at least one available MQTT entity in Home Assistant."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: ZigbeeManagerCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(
+            coordinator,
+            entry,
+            "active_devices_ha",
+            "Active devices (HA)",
+            "mdi:home-assistant",
+        )
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.ha_active_devices
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        total = self.coordinator.total_devices
+        linked = self.coordinator.ha_linked_devices
+        not_linked = [
+            dev.friendly_name
+            for dev in self.coordinator.devices.values()
+            if not dev.ha_linked and not dev.disabled
+        ]
+        ha_inactive = [
+            dev.friendly_name
+            for dev in self.coordinator.devices.values()
+            if dev.ha_linked and not dev.ha_active
+        ]
+        mismatch = [
+            dev.friendly_name
+            for dev in self.coordinator.devices.values()
+            if classify_ha_mismatch(dev, self.coordinator.bridge_online)
+            != MISMATCH_NONE
+        ]
+        return {
+            "z2m_total": total,
+            "ha_linked": linked,
+            "not_linked_in_ha": not_linked,
+            "ha_inactive_devices": ha_inactive,
+            "mismatch_devices": mismatch,
+            "ratio": round(self.coordinator.ha_active_devices / linked, 3)
+            if linked
+            else None,
         }
 
 

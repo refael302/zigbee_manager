@@ -9,7 +9,8 @@ This integration is a monitoring and alerting layer. It does not create device e
 | Entity | State | Notable attributes |
 |--------|-------|--------------------|
 | `sensor.zigbee_manager_total_devices` | Number of devices in the network (excluding the coordinator) | `bridge_online`, `z2m_version` |
-| `sensor.zigbee_manager_active_devices` | Devices currently online | `total`, `offline_devices`, `ratio` |
+| `sensor.zigbee_manager_active_devices` | Devices active per Z2M (MQTT availability) | `total`, `offline_devices`, `ha_active`, `ha_linked` |
+| `sensor.zigbee_manager_active_devices_ha` | Devices with available MQTT entities in HA | `not_linked_in_ha`, `ha_inactive_devices`, `mismatch_devices` |
 | `sensor.zigbee_manager_device_registry` | Device count | `devices` — per-device dict: IEEE, vendor, model, type, availability, `last_seen`, interview state |
 | `sensor.zigbee_manager_bridge_uptime` | Seconds since the Z2M bridge last started | `started_at`, `estimated`, `coordinator_type`, `network_channel` |
 | `sensor.zigbee_manager_system_log` | Latest alert / bridge log line | `alerts` — recent history (up to 50 records) |
@@ -24,8 +25,11 @@ Message format:
 מערכת ניהול זיגבי
 התראה: מכשיר התנתק מהרשת
 תיאור: מכשיר my_plug (0x00158d00018255df) התנתק מהרשת
-סטטוס נוכחי: 18/22 מכשירים פעילים
+סטטוס Z2M: 18/22 מכשירים פעילים
+סטטוס HA: 17/22 מכשירים פעילים ב-MQTT
 ```
+
+Devices are matched to Home Assistant via the **MQTT device registry** (IEEE address from Z2M discovery).
 
 Alert types (each can be toggled in the integration options):
 
@@ -35,6 +39,8 @@ Alert types (each can be toggled in the integration options):
 - Device removed from the network
 - Zigbee network went down (bridge offline)
 - Zigbee network recovered (bridge online)
+- Device not found in Home Assistant (MQTT)
+- Z2M / Home Assistant status mismatch
 
 A per-device cooldown (default 5 minutes) prevents alert spam.
 
