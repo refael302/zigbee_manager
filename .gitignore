@@ -19,7 +19,8 @@ Thumbs.db
 *~
 
 # IDE / local tooling (Cursor, VS Code, JetBrains)
-.cursor/
+.cursor/*
+!.cursor/rules/
 .vscode/
 .idea/
 *.code-workspace

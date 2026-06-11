@@ -28,7 +28,9 @@ from .device_registry import (
     AVAILABILITY_OFFLINE,
     AVAILABILITY_ONLINE,
     DeviceState,
+    count_active_devices,
     diff_devices,
+    mark_all_offline,
     merge_runtime_state,
     parse_bridge_devices,
     parse_last_seen,
@@ -67,7 +69,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @property
     def active_devices(self) -> int:
-        return sum(1 for dev in self.devices.values() if dev.is_active)
+        return count_active_devices(self.devices, self.bridge_online)
 
     def _device_by_name(self, friendly_name: str) -> DeviceState | None:
         for dev in self.devices.values():
@@ -99,7 +101,11 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.log.add(f"{title} — {description}", level=level, event_type=event_type)
         if notify and self.notifier.should_send(event_type, subject):
             await self.notifier.async_send(
-                event_type, description, self.active_devices, self.total_devices
+                event_type,
+                description,
+                self.active_devices,
+                self.total_devices,
+                bridge_online=self.bridge_online,
             )
         self.async_set_updated_data(self._snapshot())
 
@@ -125,6 +131,8 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if online and self.bridge_started_at is None:
                 self.bridge_started_at = datetime.now(timezone.utc)
                 self.bridge_start_estimated = True
+            if not online:
+                mark_all_offline(self.devices)
             self.async_set_updated_data(self._snapshot())
             return
 
@@ -137,6 +145,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 subject="bridge",
             )
         elif not online and previous:
+            mark_all_offline(self.devices)
             await self._emit(
                 EVENT_BRIDGE_OFFLINE,
                 "גשר ה-Zigbee2MQTT הפסיק להגיב — רשת הזיגבי אינה זמינה",

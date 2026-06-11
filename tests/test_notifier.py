@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from zigbee_manager.alert_format import AlertCooldown, format_alert
+from zigbee_manager.alert_format import (
+    AlertCooldown,
+    format_alert,
+    format_status_line,
+)
 from zigbee_manager.const import (
     EVENT_BRIDGE_OFFLINE,
     EVENT_DEVICE_UNAVAILABLE,
@@ -50,3 +54,20 @@ def test_cooldown_zero_always_allows():
     cd = AlertCooldown(clock=lambda: now[0])
     assert cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 0)
     assert cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 0)
+
+
+def test_format_alert_bridge_offline_shows_zero_active():
+    msg = format_alert(
+        EVENT_BRIDGE_OFFLINE,
+        "גשר ה-Zigbee2MQTT הפסיק להגיב",
+        0,
+        56,
+    )
+    assert "סטטוס נוכחי: 0/56 מכשירים פעילים (גשר לא זמין)" in msg
+
+
+def test_format_status_line_bridge_offline_no_devices():
+    assert (
+        format_status_line(0, 0, bridge_online=False)
+        == "סטטוס נוכחי: גשר לא זמין — אין מידע על מכשירים"
+    )

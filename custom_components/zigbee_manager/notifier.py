@@ -52,14 +52,26 @@ class TelegramNotifier:
         return self._cooldown.allow(event_type, subject, cooldown_min * 60)
 
     async def async_send(
-        self, event_type: str, description: str, active: int, total: int
+        self,
+        event_type: str,
+        description: str,
+        active: int,
+        total: int,
+        *,
+        bridge_online: bool | None = None,
     ) -> None:
         """Send a formatted alert message to the configured chat."""
         cfg = self._config()
         chat_id = str(cfg.get(CONF_TELEGRAM_CHAT_ID) or "").strip()
         if not chat_id:
             return
-        message = format_alert(event_type, description, active, total)
+        message = format_alert(
+            event_type,
+            description,
+            active,
+            total,
+            bridge_online=bridge_online,
+        )
         try:
             await self._hass.services.async_call(
                 "telegram_bot",

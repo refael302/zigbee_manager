@@ -1,0 +1,22 @@
+---
+description: Auto-commit after agent code changes in zigbee_manager
+alwaysApply: true
+---
+
+# Git after code changes
+
+After completing any code fix, feature, or refactor in this repository:
+
+1. Run `git status` and `git diff` to review what changed.
+2. Stage only relevant files. Never stage secrets (`.env`, credentials), local logs (`ops_*.txt`, `*.log`), or `.pytest_cache/`.
+3. Create a git commit with a concise message (1–2 sentences, focus on **why**).
+4. Use PowerShell-compatible commands (no bash heredocs). Example:
+   `git commit -m "Fix bridge-offline status showing all devices active" -m "Mark devices offline and report 0/N when the Z2M bridge goes down."`
+5. Do **not** push to remote unless the user explicitly asked to push in the same message.
+
+Skip commit when:
+- The task was read-only (Ask mode, review, or questions only).
+- There are no file changes to commit.
+- The user explicitly said not to commit.
+
+After committing, briefly tell the user the commit message and that they can push with `push_to_github.bat` if they want it on GitHub.

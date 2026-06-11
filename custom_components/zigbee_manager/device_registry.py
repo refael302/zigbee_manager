@@ -123,3 +123,19 @@ def merge_runtime_state(
         dev.availability = prev.availability
         dev.last_seen = prev.last_seen
         dev.silent_alerted = prev.silent_alerted
+
+
+def mark_all_offline(devices: dict[str, DeviceState]) -> None:
+    """Mark every non-disabled device offline (e.g. when the Z2M bridge goes down)."""
+    for dev in devices.values():
+        if not dev.disabled:
+            dev.availability = AVAILABILITY_OFFLINE
+
+
+def count_active_devices(
+    devices: dict[str, DeviceState], bridge_online: bool | None
+) -> int:
+    """Active device count; zero while the bridge is known to be offline."""
+    if bridge_online is False:
+        return 0
+    return sum(1 for dev in devices.values() if dev.is_active)

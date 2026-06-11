@@ -121,6 +121,7 @@ class ActiveDevicesSensor(ZigbeeManagerSensorBase):
             "total": total,
             "offline_devices": offline,
             "ratio": round(active / total, 3) if total else None,
+            "bridge_online": self.coordinator.bridge_online,
         }
 
 

@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from zigbee_manager.device_registry import (
     AVAILABILITY_OFFLINE,
     AVAILABILITY_ONLINE,
+    count_active_devices,
     diff_devices,
+    mark_all_offline,
     merge_runtime_state,
     parse_bridge_devices,
 )
@@ -103,3 +105,20 @@ def test_is_active():
     assert dev.is_active
     dev.disabled = True
     assert not dev.is_active
+
+
+def test_mark_all_offline():
+    devices = parse_bridge_devices([PLUG, SENSOR])
+    devices["0x00158d00018255df"].availability = AVAILABILITY_ONLINE
+    mark_all_offline(devices)
+    assert devices["0x00158d00018255df"].availability == AVAILABILITY_OFFLINE
+    assert devices["0x00169a00022256da"].availability == AVAILABILITY_OFFLINE
+
+
+def test_count_active_devices_zero_when_bridge_offline():
+    devices = parse_bridge_devices([PLUG, SENSOR])
+    for dev in devices.values():
+        dev.availability = AVAILABILITY_ONLINE
+    assert count_active_devices(devices, bridge_online=True) == 2
+    assert count_active_devices(devices, bridge_online=False) == 0
+    assert count_active_devices(devices, bridge_online=None) == 2
