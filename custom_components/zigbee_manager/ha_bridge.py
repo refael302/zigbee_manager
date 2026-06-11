@@ -145,7 +145,7 @@ def collect_mqtt_entity_ids(
             if entry.platform not in MQTT_PLATFORMS or entry.entity_id in seen:
                 continue
             seen.add(entry.entity_id)
-            entity_ids.append(entry.entity_id)
+            entity_ids.append(entry.entity_id.lower())
     return entity_ids
 
 
@@ -169,34 +169,40 @@ class HaStateTracker:
 
     def async_refresh_listeners(self, entity_ids: list[str]) -> None:
         """Re-subscribe when the linked MQTT entity set changes."""
-        if entity_ids == self._entity_ids and self._unsub_state:
+        normalized = [eid.lower() for eid in entity_ids]
+        if (
+            normalized == self._entity_ids
+            and self._unsub_state
+            and self._unsub_registry
+        ):
             return
+
         if self._unsub_state:
             self._unsub_state()
             self._unsub_state = None
+        if self._unsub_registry:
+            self._unsub_registry()
+            self._unsub_registry = None
 
-        self._entity_ids = list(entity_ids)
+        self._entity_ids = normalized
+        if not normalized:
+            return
 
-        if entity_ids:
+        @callback
+        def _state_changed(_event: Any) -> None:
+            self._hass.async_create_task(self._on_change())
 
-            @callback
-            def _state_changed(_event: Any) -> None:
-                self._hass.async_create_task(self._on_change())
+        @callback
+        def _registry_updated(_event: Any) -> None:
+            self._hass.async_create_task(self._on_change())
 
-            self._unsub_state = async_track_state_change_event(
-                self._hass, entity_ids, _state_changed
-            )
-            _LOGGER.debug(
-                "Zigbee Manager: tracking %d MQTT entity states",
-                len(entity_ids),
-            )
-
-        if self._unsub_registry is None:
-
-            @callback
-            def _registry_updated(_event: Any) -> None:
-                self._hass.async_create_task(self._on_change())
-
-            self._unsub_registry = async_track_entity_registry_updated_event(
-                self._hass, _registry_updated
-            )
+        self._unsub_state = async_track_state_change_event(
+            self._hass, normalized, _state_changed
+        )
+        self._unsub_registry = async_track_entity_registry_updated_event(
+            self._hass, normalized, _registry_updated
+        )
+        _LOGGER.debug(
+            "Zigbee Manager: tracking %d MQTT entity states/registry updates",
+            len(normalized),
+        )
