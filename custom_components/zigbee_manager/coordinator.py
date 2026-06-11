@@ -8,6 +8,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
@@ -176,7 +177,8 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         def _on_grace_end(_now: datetime) -> None:
             self.hass.async_create_task(self._async_on_startup_grace_end())
 
-        self.hass.helpers.event.async_track_point_in_time(
+        async_track_point_in_time(
+            self.hass,
             _on_grace_end,
             datetime.now(timezone.utc) + timedelta(minutes=grace),
         )
@@ -268,13 +270,11 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._async_flush_batch(alert.event_type)
                 )
 
-            self._batch_handles[alert.event_type] = (
-                self.hass.helpers.event.async_track_point_in_time(
-                    _flush,
-                    datetime.now(timezone.utc)
-                    + timedelta(seconds=BATCH_WINDOW_SECONDS),
-                )
-            )
+        self._batch_handles[alert.event_type] = async_track_point_in_time(
+            self.hass,
+            _flush,
+            datetime.now(timezone.utc) + timedelta(seconds=BATCH_WINDOW_SECONDS),
+        )
 
     async def _async_flush_batch(self, event_type: str) -> None:
         self._batch_handles.pop(event_type, None)
