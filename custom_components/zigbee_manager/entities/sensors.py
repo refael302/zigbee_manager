@@ -237,5 +237,8 @@ class SystemLogSensor(ZigbeeManagerSensorBase):
             "startup_grace_active": self.coordinator.data.get(
                 "startup_grace_active", False
             ),
+            "device_snapshot_baseline": self.coordinator.data.get(
+                "device_snapshot_baseline", 0
+            ),
             "alerts": self.coordinator.log.entries(),
         }

@@ -17,6 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Zigbee Manager from a config entry."""
     coordinator = ZigbeeManagerCoordinator(hass, entry)
+    await coordinator.async_load_device_snapshot()
 
     base_topic = entry.data.get(CONF_BASE_TOPIC, DEFAULT_BASE_TOPIC)
     unsubs = await async_subscribe_z2m(hass, coordinator, base_topic)

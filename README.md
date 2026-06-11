@@ -14,6 +14,19 @@ This integration is a monitoring and alerting layer. It does not create device e
 | `sensor.zigbee_manager_device_registry` | Device count | `devices` — per-device dict: IEEE, vendor, model, type, availability, `last_seen`, interview state |
 | `sensor.zigbee_manager_system_log` | Latest alert / bridge log line | `alerts` — recent history (up to 50 records) |
 
+## Button
+
+| Entity | Action |
+|--------|--------|
+| `button.zigbee_manager_reset_device_snapshot` | Save the **current** Z2M device list as the persisted baseline (clears “vanished” tracking). Use after you accept that missing devices are gone for good. |
+
+## Vanished devices (persisted baseline)
+
+The integration stores the last known device list on disk. After a Home Assistant restart, if devices that were in the baseline are missing from Z2M’s `bridge/devices` list, you get a **startup-only** Telegram alert (same toggle as “device removed”). Each missing device is alerted **at most once per calendar day** until you press **Reset device snapshot**.
+
+- Live join/remove while HA is running updates the baseline automatically.
+- First install seeds the baseline from the current list (no alert flood).
+
 ## Telegram alerts
 
 Alerts are sent through the Home Assistant [Telegram Bot](https://www.home-assistant.io/integrations/telegram_bot/) integration, which must be configured first. You only provide the destination chat ID.

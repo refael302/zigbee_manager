@@ -47,6 +47,7 @@ EVENT_DEVICE_UNAVAILABLE = "device_unavailable"
 EVENT_DEVICE_AVAILABLE = "device_available"
 EVENT_DEVICE_SILENT = "device_silent"
 EVENT_DEVICE_REMOVED = "device_removed"
+EVENT_DEVICE_VANISHED = "device_vanished"
 EVENT_BRIDGE_OFFLINE = "bridge_offline"
 EVENT_BRIDGE_ONLINE = "bridge_online"
 EVENT_DEVICE_NOT_IN_HA = "device_not_in_ha"
@@ -58,6 +59,7 @@ EVENT_TOGGLE_MAP: dict[str, str] = {
     EVENT_DEVICE_UNAVAILABLE: CONF_ALERT_DEVICE_UNAVAILABLE,
     EVENT_DEVICE_SILENT: CONF_ALERT_DEVICE_SILENT,
     EVENT_DEVICE_REMOVED: CONF_ALERT_DEVICE_REMOVED,
+    EVENT_DEVICE_VANISHED: CONF_ALERT_DEVICE_REMOVED,
     EVENT_BRIDGE_OFFLINE: CONF_ALERT_BRIDGE_OFFLINE,
     EVENT_BRIDGE_ONLINE: CONF_ALERT_BRIDGE_ONLINE,
     EVENT_DEVICE_NOT_IN_HA: CONF_ALERT_DEVICE_NOT_IN_HA,
@@ -71,6 +73,7 @@ EVENT_TITLES_HE: dict[str, str] = {
     EVENT_DEVICE_AVAILABLE: "מכשיר חזר לרשת",
     EVENT_DEVICE_SILENT: "מכשיר לא תקשר מעל 24 שעות",
     EVENT_DEVICE_REMOVED: "מכשיר נמחק מהרשת",
+    EVENT_DEVICE_VANISHED: "מכשיר נעלם מהרשת (השוואה להפעלה קודמת)",
     EVENT_BRIDGE_OFFLINE: "רשת זיגבי נפלה",
     EVENT_BRIDGE_ONLINE: "רשת זיגבי חזרה לפעילות",
     EVENT_DEVICE_NOT_IN_HA: "מכשיר לא נמצא ב-Home Assistant",
@@ -87,4 +90,4 @@ UPDATE_INTERVAL_SECONDS = 60
 # Devices above this count get a trimmed registry attribute payload (HA ~16KB limit)
 REGISTRY_ATTR_DEVICE_LIMIT = 200
 
-PLATFORMS: list[str] = ["sensor"]
+PLATFORMS: list[str] = ["sensor", "button"]

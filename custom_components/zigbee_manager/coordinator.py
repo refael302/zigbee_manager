@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_ALERT_DEVICE_HA_MISMATCH,
@@ -24,6 +25,7 @@ from .const import (
     EVENT_DEVICE_JOINED,
     EVENT_DEVICE_NOT_IN_HA,
     EVENT_DEVICE_REMOVED,
+    EVENT_DEVICE_VANISHED,
     EVENT_DEVICE_SILENT,
     EVENT_DEVICE_UNAVAILABLE,
     EVENT_TITLES_HE,
@@ -57,6 +59,12 @@ from .device_registry import (
     parse_bridge_devices,
     parse_last_seen,
 )
+from .device_snapshot import (
+    filter_vanished_for_alert,
+    find_vanished,
+    snapshot_from_devices,
+)
+from .device_snapshot_store import DeviceSnapshotStore
 from .integration_log import IntegrationLog
 from .notifier import TelegramNotifier
 
@@ -87,6 +95,74 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._ha_tracker = HaStateTracker(hass, self._async_on_ha_entities_changed)
         self._device_mismatch: dict[str, str] = {}
         self._ha_mismatch_initialized = False
+        self._device_snapshot = DeviceSnapshotStore(hass, entry.entry_id)
+        self._vanished_startup_check_done = False
+
+    async def async_load_device_snapshot(self) -> None:
+        """Load persisted device baseline from disk."""
+        await self._device_snapshot.async_load()
+
+    async def async_reset_device_snapshot(self) -> None:
+        """Set the stored baseline to the current Z2M device list."""
+        self._device_snapshot.set_baseline(snapshot_from_devices(self.devices))
+        self._device_snapshot.clear_vanished_alerted()
+        await self._device_snapshot.async_save()
+        self.log.add(
+            f"רשימת בסיס מכשירים אופסה — {self._device_snapshot.baseline_count} מכשירים",
+            level="info",
+        )
+        self.async_set_updated_data(self._snapshot())
+
+    def _current_device_snapshot(self) -> dict[str, str]:
+        return snapshot_from_devices(self.devices)
+
+    async def _async_persist_snapshot_add(self, ieee: str, friendly_name: str) -> None:
+        self._device_snapshot.add_device(ieee, friendly_name)
+        await self._device_snapshot.async_save()
+
+    async def _async_persist_snapshot_remove(self, ieee: str) -> None:
+        self._device_snapshot.remove_device(ieee)
+        await self._device_snapshot.async_save()
+
+    async def _async_maybe_check_vanished_on_startup(self) -> None:
+        """Compare persisted baseline to Z2M once per HA start (after grace + devices)."""
+        if self._vanished_startup_check_done:
+            return
+        if not self._devices_received:
+            return
+        if self._alert_engine.in_startup_grace():
+            return
+
+        self._vanished_startup_check_done = True
+        baseline = self._device_snapshot.baseline
+        current = self._current_device_snapshot()
+
+        if not baseline:
+            self._device_snapshot.set_baseline(current)
+            await self._device_snapshot.async_save()
+            self.log.add(
+                f"רשימת בסיס מכשירים נוצרה — {len(current)} מכשירים",
+                level="info",
+            )
+            return
+
+        today = dt_util.now().date().isoformat()
+        vanished = find_vanished(baseline, current)
+        to_alert = filter_vanished_for_alert(
+            vanished, self._device_snapshot.vanished_alerted, today
+        )
+
+        for ieee, name in to_alert:
+            await self._emit(
+                EVENT_DEVICE_VANISHED,
+                f"מכשיר {name} ({ieee}) נעלם מ-Z2M (היה ברשימת הבסיס, לא נמצא בהפעלה)",
+                subject=ieee,
+                level="warning",
+            )
+            self._device_snapshot.mark_vanished_alerted(ieee, today)
+
+        if to_alert:
+            await self._device_snapshot.async_save()
 
     # ------------------------------------------------------------------ helpers
 
@@ -162,6 +238,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "תקופת חסד בהפעלה הסתיימה — סנכרון בסיס חוסר התאמה HA",
             level="info",
         )
+        await self._async_maybe_check_vanished_on_startup()
         if self._alert_engine.digest_pending():
             await self._async_flush_digest(startup=True, force=True)
         self.async_set_updated_data(self._snapshot())
@@ -307,6 +384,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "last_log": self.log.latest,
             "telegram_digest_pending": self._alert_engine.digest_pending(),
             "startup_grace_active": self._alert_engine.in_startup_grace(),
+            "device_snapshot_baseline": self._device_snapshot.baseline_count,
         }
 
     async def _async_refresh_ha_status(self) -> None:
@@ -428,6 +506,9 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 f"מכשיר {dev.friendly_name} ({dev.ieee_address}) הצטרף לרשת",
                 subject=dev.ieee_address,
             )
+            await self._async_persist_snapshot_add(
+                dev.ieee_address, dev.friendly_name
+            )
         for dev in removed:
             self._device_mismatch.pop(dev.ieee_address, None)
             await self._emit(
@@ -436,7 +517,9 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 subject=dev.ieee_address,
                 level="warning",
             )
+            await self._async_persist_snapshot_remove(dev.ieee_address)
         await self._async_refresh_ha_status()
+        await self._async_maybe_check_vanished_on_startup()
         self.async_set_updated_data(self._snapshot())
 
     async def async_handle_bridge_event(self, payload: Any) -> None:
@@ -454,6 +537,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 f"מכשיר {name} ({ieee}) הצטרף לרשת",
                 subject=ieee,
             )
+            await self._async_persist_snapshot_add(ieee, name)
         elif event_type == "device_leave":
             self.devices.pop(ieee, None)
             self._device_mismatch.pop(ieee, None)
@@ -463,6 +547,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 subject=ieee,
                 level="warning",
             )
+            await self._async_persist_snapshot_remove(ieee)
 
     async def async_handle_bridge_info(self, payload: Any) -> None:
         """`{base}/bridge/info` — version, coordinator type, network settings (retained)."""

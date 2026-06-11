@@ -45,5 +45,12 @@
     "error": {
       "invalid_chat_id": "Chat ID must be a number (it may start with a minus sign)."
     }
+  },
+  "entity": {
+    "button": {
+      "reset_device_snapshot": {
+        "name": "Reset device snapshot"
+      }
+    }
   }
 }
