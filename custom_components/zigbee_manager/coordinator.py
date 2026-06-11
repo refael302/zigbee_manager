@@ -167,6 +167,14 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             cooldown_min = DEFAULT_TELEGRAM_COOLDOWN_MINUTES
         return max_hour, max_day, cooldown_min * 60
 
+    def _schedule_async(self, coro_factory) -> None:
+        """Schedule coroutine work on the HA event loop (safe from timer threads)."""
+
+        def _start() -> None:
+            self.hass.async_create_task(coro_factory())
+
+        self.hass.loop.call_soon_threadsafe(_start)
+
     def async_schedule_startup_finalizer(self) -> None:
         """After startup grace, sync HA mismatch baseline without flooding Telegram."""
         grace = self._startup_grace_minutes()
@@ -175,7 +183,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         def _on_grace_end(_now: datetime) -> None:
-            self.hass.async_create_task(self._async_on_startup_grace_end())
+            self._schedule_async(self._async_on_startup_grace_end)
 
         async_track_point_in_time(
             self.hass,
@@ -263,14 +271,15 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _enqueue_batch(self, alert: PendingAlert) -> None:
         self._alert_engine.add_to_batch(alert)
-        if alert.event_type not in self._batch_handles:
+        if alert.event_type in self._batch_handles:
+            return
 
-            def _flush(_now: datetime) -> None:
-                self.hass.async_create_task(
-                    self._async_flush_batch(alert.event_type)
-                )
+        event_type = alert.event_type
 
-        self._batch_handles[alert.event_type] = async_track_point_in_time(
+        def _flush(_now: datetime) -> None:
+            self._schedule_async(lambda: self._async_flush_batch(event_type))
+
+        self._batch_handles[event_type] = async_track_point_in_time(
             self.hass,
             _flush,
             datetime.now(timezone.utc) + timedelta(seconds=BATCH_WINDOW_SECONDS),
