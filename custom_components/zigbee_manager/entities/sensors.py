@@ -1,17 +1,11 @@
-"""Zigbee Manager sensors: device counts, registry, uptime and system log."""
+"""Zigbee Manager sensors: device counts, registry and system log."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorStateClass,
-)
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -37,7 +31,6 @@ async def async_setup_entry(
             ActiveDevicesSensor(coordinator, entry),
             ActiveDevicesHaSensor(coordinator, entry),
             DeviceRegistrySensor(coordinator, entry),
-            BridgeUptimeSensor(coordinator, entry),
             SystemLogSensor(coordinator, entry),
         ]
     )
@@ -211,38 +204,6 @@ class DeviceRegistrySensor(ZigbeeManagerSensorBase):
         return {
             "devices": {dev.friendly_name: dev.as_attribute() for dev in devices},
             "truncated": len(self.coordinator.devices) > REGISTRY_ATTR_DEVICE_LIMIT,
-        }
-
-
-class BridgeUptimeSensor(ZigbeeManagerSensorBase):
-    """Seconds since the Z2M bridge last (re)started."""
-
-    _attr_device_class = SensorDeviceClass.DURATION
-    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
-
-    def __init__(
-        self, coordinator: ZigbeeManagerCoordinator, entry: ConfigEntry
-    ) -> None:
-        super().__init__(
-            coordinator, entry, "bridge_uptime", "Bridge uptime", "mdi:timer-outline"
-        )
-
-    @property
-    def native_value(self) -> int | None:
-        started = self.coordinator.bridge_started_at
-        if started is None:
-            return None
-        return int((datetime.now(timezone.utc) - started).total_seconds())
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        started = self.coordinator.bridge_started_at
-        return {
-            "started_at": started.isoformat() if started else None,
-            "estimated": self.coordinator.bridge_start_estimated,
-            "z2m_version": self.coordinator.bridge_info.get("version"),
-            "coordinator_type": self.coordinator.bridge_info.get("coordinator_type"),
-            "network_channel": self.coordinator.bridge_info.get("network_channel"),
         }
 
 

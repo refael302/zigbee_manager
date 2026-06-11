@@ -12,7 +12,6 @@ This integration is a monitoring and alerting layer. It does not create device e
 | `sensor.zigbee_manager_active_devices` | Devices active per Z2M (MQTT availability) | `total`, `offline_devices`, `ha_active`, `ha_linked` |
 | `sensor.zigbee_manager_active_devices_ha` | Devices with available MQTT entities in HA | `not_linked_in_ha`, `ha_inactive_devices`, `mismatch_devices` |
 | `sensor.zigbee_manager_device_registry` | Device count | `devices` — per-device dict: IEEE, vendor, model, type, availability, `last_seen`, interview state |
-| `sensor.zigbee_manager_bridge_uptime` | Seconds since the Z2M bridge last started | `started_at`, `estimated`, `coordinator_type`, `network_channel` |
 | `sensor.zigbee_manager_system_log` | Latest alert / bridge log line | `alerts` — recent history (up to 50 records) |
 
 ## Telegram alerts
