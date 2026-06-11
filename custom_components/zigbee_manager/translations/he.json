@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "חיבור ל-Zigbee2MQTT",
+        "description": "התחברות לגשר Zigbee2MQTT דרך MQTT.",
+        "data": {
+          "base_topic": "נושא בסיס של Zigbee2MQTT"
+        }
+      },
+      "telegram": {
+        "title": "התראות טלגרם",
+        "description": "התראות נשלחות דרך אינטגרציית Telegram Bot של Home Assistant. השאר ריק כדי לבטל התראות טלגרם.",
+        "data": {
+          "telegram_chat_id": "מזהה צ'אט טלגרם (Chat ID)"
+        }
+      }
+    },
+    "error": {
+      "mqtt_not_configured": "אינטגרציית MQTT אינה מוגדרת ב-Home Assistant.",
+      "invalid_chat_id": "מזהה הצ'אט חייב להיות מספר (יכול להתחיל במינוס)."
+    },
+    "abort": {
+      "already_configured": "נושא הבסיס הזה של Zigbee2MQTT כבר מוגדר."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "הגדרות ניהול זיגבי",
+        "data": {
+          "telegram_chat_id": "מזהה צ'אט טלגרם (Chat ID)",
+          "alert_device_joined": "התראה: מכשיר הצטרף לרשת",
+          "alert_device_unavailable": "התראה: מכשיר הפך ללא זמין",
+          "alert_device_silent_24h": "התראה: מכשיר לא תקשר זמן רב",
+          "alert_device_removed": "התראה: מכשיר נמחק מהרשת",
+          "alert_bridge_offline": "התראה: רשת זיגבי נפלה",
+          "alert_bridge_online": "התראה: רשת זיגבי חזרה",
+          "silent_threshold_hours": "שעות שקט לפני דיווח על מכשיר",
+          "telegram_cooldown_minutes": "דקות מינימום בין התראות זהות"
+        }
+      }
+    },
+    "error": {
+      "invalid_chat_id": "מזהה הצ'אט חייב להיות מספר (יכול להתחיל במינוס)."
+    }
+  }
+}

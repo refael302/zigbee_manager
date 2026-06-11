@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Zigbee2MQTT connection",
+        "description": "Connect to your Zigbee2MQTT bridge via MQTT.",
+        "data": {
+          "base_topic": "Zigbee2MQTT base topic"
+        }
+      },
+      "telegram": {
+        "title": "Telegram notifications",
+        "description": "Alerts are sent via the Home Assistant Telegram Bot integration. Leave empty to disable Telegram alerts.",
+        "data": {
+          "telegram_chat_id": "Telegram chat ID"
+        }
+      }
+    },
+    "error": {
+      "mqtt_not_configured": "The MQTT integration is not set up in Home Assistant.",
+      "invalid_chat_id": "Chat ID must be a number (it may start with a minus sign)."
+    },
+    "abort": {
+      "already_configured": "This Zigbee2MQTT base topic is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Zigbee Manager options",
+        "data": {
+          "telegram_chat_id": "Telegram chat ID",
+          "alert_device_joined": "Alert: device joined the network",
+          "alert_device_unavailable": "Alert: device became unavailable",
+          "alert_device_silent_24h": "Alert: device silent for too long",
+          "alert_device_removed": "Alert: device removed from the network",
+          "alert_bridge_offline": "Alert: Zigbee network went down",
+          "alert_bridge_online": "Alert: Zigbee network recovered",
+          "silent_threshold_hours": "Hours of silence before a device is reported",
+          "telegram_cooldown_minutes": "Minimum minutes between identical alerts"
+        }
+      }
+    },
+    "error": {
+      "invalid_chat_id": "Chat ID must be a number (it may start with a minus sign)."
+    }
+  }
+}

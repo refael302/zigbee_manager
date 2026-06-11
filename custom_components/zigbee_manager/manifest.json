@@ -1,0 +1,13 @@
+{
+  "domain": "zigbee_manager",
+  "name": "Zigbee Manager",
+  "codeowners": ["@refael302"],
+  "config_flow": true,
+  "dependencies": ["mqtt", "telegram_bot"],
+  "documentation": "https://github.com/refael302/zigbee_manager",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/refael302/zigbee_manager/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

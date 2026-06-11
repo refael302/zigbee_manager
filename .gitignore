@@ -1,0 +1,34 @@
+# Local helper scripts (Windows)
+*.cmd
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env.*
+.pytest_cache/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE / local tooling (Cursor, VS Code, JetBrains)
+.cursor/
+.vscode/
+.idea/
+*.code-workspace
+
+# Local overrides / scratch
+*.local
+
+# Logs (local / copied from HA config)
+*.log
+*.log.*
+ops_*.txt
+zigbee_manager_logs/
