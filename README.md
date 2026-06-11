@@ -29,7 +29,7 @@ Message format:
 סטטוס HA: 17/22 מכשירים פעילים ב-MQTT
 ```
 
-Devices are matched to Home Assistant via the **MQTT device registry** (IEEE address from Z2M discovery).
+Devices are matched to Home Assistant via the **MQTT device registry** using IEEE address, friendly name (`zigbee2mqtt` identifiers), device name, and MQTT entity `unique_id` fallbacks. Disabled MQTT entities are detected; disabling a device in HA triggers a Z2M/HA mismatch alert when the toggle is enabled.
 
 Alert types (each can be toggled in the integration options):
 

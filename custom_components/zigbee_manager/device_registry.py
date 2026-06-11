@@ -34,6 +34,8 @@ class DeviceState:
     ha_linked: bool = False
     ha_active: bool = False
     ha_entity_count: int = 0
+    ha_disabled_count: int = 0
+    ha_link_method: str = "none"
 
     @property
     def is_active(self) -> bool:
@@ -56,6 +58,8 @@ class DeviceState:
             "ha_linked": self.ha_linked,
             "ha_active": self.ha_active,
             "ha_entity_count": self.ha_entity_count,
+            "ha_disabled_count": self.ha_disabled_count,
+            "ha_link_method": self.ha_link_method,
         }
 
 
@@ -132,6 +136,8 @@ def merge_runtime_state(
         dev.ha_linked = prev.ha_linked
         dev.ha_active = prev.ha_active
         dev.ha_entity_count = prev.ha_entity_count
+        dev.ha_disabled_count = prev.ha_disabled_count
+        dev.ha_link_method = prev.ha_link_method
 
 
 def mark_all_offline(devices: dict[str, DeviceState]) -> None:

@@ -145,6 +145,8 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _ha_context_suffix(self, dev: DeviceState) -> str:
         if not dev.ha_linked:
             return " [HA: לא נמצא]"
+        if dev.ha_entity_count and dev.ha_disabled_count >= dev.ha_entity_count:
+            return " [HA: מושבת]"
         return f" [HA: {'זמין' if dev.ha_active else 'לא זמין'}]"
 
     def _snapshot(self) -> dict[str, Any]:

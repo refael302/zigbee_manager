@@ -13,11 +13,16 @@ from zigbee_manager.ha_status import (
     MISMATCH_NOT_IN_HA,
     MISMATCH_Z2M_OFFLINE_HA_ONLINE,
     MISMATCH_Z2M_ONLINE_HA_OFFLINE,
+    MqttEntityStatus,
     classify_ha_mismatch,
     count_ha_active,
+    device_ha_active_from_mqtt_entities,
     device_ha_active_from_states,
+    friendly_name_lookup_keys,
     ieee_from_identifier_part,
+    ieee_from_unique_id,
     mismatch_description,
+    normalize_friendly_name,
     normalize_ieee,
 )
 
@@ -40,15 +45,36 @@ def test_normalize_ieee():
     assert normalize_ieee("zigbee2mqtt_0x00158d00018255df") == "0x00158d00018255df"
 
 
-def test_ieee_from_identifier_part():
-    assert ieee_from_identifier_part("0x00158d00018255df") == "0x00158d00018255df"
-    assert ieee_from_identifier_part("zigbee2mqtt_0x00158d00018255df") == "0x00158d00018255df"
+def test_friendly_name_lookup_keys():
+    keys = friendly_name_lookup_keys("Kitchen/Motion")
+    assert "kitchen/motion" in keys
+    assert "kitchen_motion" in keys
 
 
-def test_device_ha_active_from_states():
-    assert device_ha_active_from_states(["23.5", "unavailable"])
-    assert not device_ha_active_from_states(["unavailable", "unknown"])
-    assert not device_ha_active_from_states([])
+def test_ieee_from_unique_id():
+    assert ieee_from_unique_id("0x00158d00018255df_temperature") == "0x00158d00018255df"
+    assert ieee_from_unique_id("my_plug_battery") is None
+
+
+def test_device_ha_active_from_mqtt_entities():
+    assert device_ha_active_from_mqtt_entities(
+        [MqttEntityStatus(disabled=False, state="23.5")]
+    )
+    assert not device_ha_active_from_mqtt_entities(
+        [MqttEntityStatus(disabled=True, state="23.5")]
+    )
+    assert not device_ha_active_from_mqtt_entities(
+        [
+            MqttEntityStatus(disabled=False, state="unavailable"),
+            MqttEntityStatus(disabled=True, state="100"),
+        ]
+    )
+    assert device_ha_active_from_mqtt_entities(
+        [
+            MqttEntityStatus(disabled=False, state="unavailable"),
+            MqttEntityStatus(disabled=False, state="on"),
+        ]
+    )
 
 
 def test_classify_mismatch_not_in_ha():
@@ -96,8 +122,14 @@ def test_count_ha_active():
     assert count_ha_active(devices) == (1, 1)
 
 
-def test_mismatch_description_hebrew():
+def test_mismatch_description_disabled_in_ha():
     dev = _plug()
+    dev.ha_entity_count = 3
+    dev.ha_disabled_count = 3
     text = mismatch_description(dev, MISMATCH_Z2M_ONLINE_HA_OFFLINE)
-    assert "חוסר התאמה" in text
-    assert "my_plug" in text
+    assert "מושבתים" in text
+
+
+def test_device_ha_active_from_states():
+    assert device_ha_active_from_states(["23.5", "unavailable"])
+    assert not device_ha_active_from_states(["unavailable", "unknown"])

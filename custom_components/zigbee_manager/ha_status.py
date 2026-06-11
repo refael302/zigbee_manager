@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -15,6 +16,35 @@ MISMATCH_NOT_IN_HA = "not_in_ha"
 MISMATCH_Z2M_ONLINE_HA_OFFLINE = "z2m_online_ha_offline"
 MISMATCH_Z2M_OFFLINE_HA_ONLINE = "z2m_offline_ha_online"
 
+LINK_NONE = "none"
+LINK_IEEE = "ieee"
+LINK_FRIENDLY_NAME = "friendly_name"
+
+
+@dataclass
+class HaDeviceLookup:
+    """Indexes HA device ids by IEEE and by Z2M-friendly name."""
+
+    by_ieee: dict[str, str]
+    by_friendly_name: dict[str, str]
+
+
+def resolve_ha_device_id(
+    dev: DeviceState, lookup: HaDeviceLookup
+) -> tuple[str | None, str]:
+    """Resolve a Z2M device to a HA device id and the method used."""
+    ieee = normalize_ieee(dev.ieee_address)
+    device_id = lookup.by_ieee.get(ieee)
+    if device_id:
+        return device_id, LINK_IEEE
+
+    for key in friendly_name_lookup_keys(dev.friendly_name):
+        device_id = lookup.by_friendly_name.get(key)
+        if device_id:
+            return device_id, LINK_FRIENDLY_NAME
+
+    return None, LINK_NONE
+
 
 def normalize_ieee(value: str) -> str:
     """Lower-case IEEE address with 0x prefix."""
@@ -25,10 +55,32 @@ def normalize_ieee(value: str) -> str:
     return text
 
 
+def normalize_friendly_name(value: str) -> str:
+    """Normalize a Z2M / HA device name for lookup (case-insensitive)."""
+    return str(value).strip().lower()
+
+
+def friendly_name_lookup_keys(name: str) -> set[str]:
+    """Generate lookup keys for a Z2M friendly name (slashes vs underscores)."""
+    base = normalize_friendly_name(name)
+    keys = {base}
+    keys.add(base.replace("/", "_"))
+    keys.add(base.replace("_", "/"))
+    return keys
+
+
 def ieee_from_identifier_part(part: str) -> str | None:
     """Extract an IEEE address from a device identifier or connection fragment."""
     match = IEEE_RE.search(str(part))
     return match.group(0).lower() if match else None
+
+
+def ieee_from_unique_id(unique_id: str | None) -> str | None:
+    """Extract IEEE from a typical MQTT entity unique_id (prefix before first _)."""
+    if not unique_id:
+        return None
+    head = str(unique_id).split("_", 1)[0]
+    return ieee_from_identifier_part(head)
 
 
 def entity_state_is_available(state: str | None) -> bool:
@@ -36,8 +88,26 @@ def entity_state_is_available(state: str | None) -> bool:
     return state not in (None, "unavailable", "unknown")
 
 
+@dataclass(frozen=True)
+class MqttEntityStatus:
+    """Snapshot of one MQTT entity relevant to HA availability."""
+
+    disabled: bool
+    state: str | None
+
+
+def device_ha_active_from_mqtt_entities(entities: list[MqttEntityStatus]) -> bool:
+    """Device is HA-active when it has an enabled entity with an available state."""
+    if not entities:
+        return False
+    enabled = [e for e in entities if not e.disabled]
+    if not enabled:
+        return False
+    return any(entity_state_is_available(e.state) for e in enabled)
+
+
 def device_ha_active_from_states(states: list[str | None]) -> bool:
-    """Device is HA-active when it has at least one available MQTT entity state."""
+    """Backward-compatible helper for tests without disabled metadata."""
     if not states:
         return False
     return any(entity_state_is_available(s) for s in states)
@@ -70,6 +140,11 @@ def mismatch_description(dev: DeviceState, mismatch: str) -> str:
     if mismatch == MISMATCH_NOT_IN_HA:
         return f"מכשיר {name} קיים ב-Z2M אך לא נמצא ב-Home Assistant (MQTT)"
     if mismatch == MISMATCH_Z2M_ONLINE_HA_OFFLINE:
+        if dev.ha_entity_count and dev.ha_disabled_count >= dev.ha_entity_count:
+            return (
+                f"חוסר התאמה: מכשיר {name} פעיל ב-Z2M "
+                f"אך כל ה-entities שלו מושבתים ב-Home Assistant"
+            )
         return (
             f"חוסר התאמה: מכשיר {name} פעיל ב-Z2M "
             f"אך לא זמין ב-Home Assistant"
