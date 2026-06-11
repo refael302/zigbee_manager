@@ -6,24 +6,19 @@ import logging
 
 from homeassistant.core import HomeAssistant
 
-from .alert_format import AlertCooldown, format_alert, format_batched_alert
-from .const import (
-    CONF_TELEGRAM_CHAT_ID,
-    CONF_TELEGRAM_COOLDOWN_MINUTES,
-    DEFAULT_TELEGRAM_COOLDOWN_MINUTES,
-    EVENT_TOGGLE_MAP,
-)
+from .alert_format import format_alert, format_digest_alert, group_descriptions_by_type
+from .alert_engine import PendingAlert
+from .const import CONF_TELEGRAM_CHAT_ID, EVENT_TOGGLE_MAP
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class TelegramNotifier:
-    """Sends formatted alerts, honoring per-event toggles and an anti-spam cooldown."""
+    """Sends formatted alerts, honoring per-event toggles."""
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         self._hass = hass
         self._entry_id = entry_id
-        self._cooldown = AlertCooldown()
 
     def _config(self) -> dict:
         entry = self._hass.config_entries.async_get_entry(self._entry_id)
@@ -42,22 +37,6 @@ class TelegramNotifier:
             return False
         return True
 
-    def should_send(self, event_type: str, subject: str = "") -> bool:
-        """Check toggle + cooldown without sending. Updates the cooldown clock when True."""
-        if not self.is_enabled(event_type):
-            return False
-
-        cfg = self._config()
-        try:
-            cooldown_min = float(
-                cfg.get(
-                    CONF_TELEGRAM_COOLDOWN_MINUTES, DEFAULT_TELEGRAM_COOLDOWN_MINUTES
-                )
-            )
-        except (TypeError, ValueError):
-            cooldown_min = DEFAULT_TELEGRAM_COOLDOWN_MINUTES
-        return self._cooldown.allow(event_type, subject, cooldown_min * 60)
-
     async def async_send(
         self,
         event_type: str,
@@ -69,7 +48,6 @@ class TelegramNotifier:
         ha_active: int = 0,
         ha_linked: int = 0,
         critical: bool = False,
-        suppressed_count: int = 0,
     ) -> None:
         """Send a formatted alert message to the configured chat."""
         cfg = self._config()
@@ -85,31 +63,33 @@ class TelegramNotifier:
             ha_active=ha_active,
             ha_linked=ha_linked,
             critical=critical,
-            suppressed_count=suppressed_count,
         )
         await self._async_deliver(chat_id, message)
 
-    async def async_send_batch(
+    async def async_send_digest(
         self,
-        event_type: str,
-        items: list[tuple[str, str]],
+        items: list[PendingAlert],
         active: int,
         total: int,
         *,
+        startup: bool = False,
         bridge_online: bool | None = None,
         ha_active: int = 0,
         ha_linked: int = 0,
     ) -> None:
-        """Send one message summarizing several similar alerts."""
+        """Send one digest message covering several queued alerts."""
         cfg = self._config()
         chat_id = str(cfg.get(CONF_TELEGRAM_CHAT_ID) or "").strip()
         if not chat_id or not items:
             return
-        message = format_batched_alert(
-            event_type,
-            items,
+        grouped = group_descriptions_by_type(
+            [(item.event_type, item.description) for item in items]
+        )
+        message = format_digest_alert(
+            grouped,
             active,
             total,
+            startup=startup,
             bridge_online=bridge_online,
             ha_active=ha_active,
             ha_linked=ha_linked,

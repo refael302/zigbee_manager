@@ -1,12 +1,32 @@
-"""Pure helpers for alert formatting and anti-spam cooldown (unit-testable, no HA imports)."""
+"""Pure helpers for alert formatting (unit-testable, no HA imports)."""
 
 from __future__ import annotations
 
-import time
+from collections import defaultdict
 
-from .const import EVENT_BRIDGE_OFFLINE, EVENT_TITLES_HE
+from .const import (
+    EVENT_BRIDGE_OFFLINE,
+    EVENT_DEVICE_HA_MISMATCH,
+    EVENT_DEVICE_JOINED,
+    EVENT_DEVICE_NOT_IN_HA,
+    EVENT_DEVICE_REMOVED,
+    EVENT_DEVICE_SILENT,
+    EVENT_DEVICE_UNAVAILABLE,
+    EVENT_TITLES_HE,
+)
 
 HEADER = "מערכת ניהול זיגבי"
+
+DIGEST_EVENT_ORDER: tuple[str, ...] = (
+    EVENT_DEVICE_UNAVAILABLE,
+    EVENT_DEVICE_HA_MISMATCH,
+    EVENT_DEVICE_NOT_IN_HA,
+    EVENT_DEVICE_JOINED,
+    EVENT_DEVICE_REMOVED,
+    EVENT_DEVICE_SILENT,
+)
+
+_MAX_BULLETS_PER_SECTION = 15
 
 
 def format_status_block(
@@ -65,7 +85,6 @@ def format_alert(
     ha_active: int = 0,
     ha_linked: int = 0,
     critical: bool = False,
-    suppressed_count: int = 0,
 ) -> str:
     """Build the standard Hebrew alert message."""
     title = EVENT_TITLES_HE.get(event_type, event_type)
@@ -82,60 +101,68 @@ def format_alert(
     if critical:
         lines.append("⚠️ אירוע קריטי")
     lines.extend([f"התראה: {title}", f"תיאור: {description}", status])
-    if suppressed_count > 0:
-        lines.append("")
-        lines.append(
-            f"⛔ המערכת סיננה {suppressed_count} התראות נוספות מאז ההודעה האחרונה."
-        )
-        lines.append(
-            "לבדיקה: חיישן System log של Zigbee Manager (או יומן האינטגרציה)."
-        )
     return "\n".join(lines)
 
 
-def format_batched_alert(
-    event_type: str,
-    items: list[tuple[str, str]],
+def format_digest_alert(
+    descriptions_by_type: dict[str, list[str]],
     active: int,
     total: int,
     *,
+    startup: bool = False,
     bridge_online: bool | None = None,
     ha_active: int = 0,
     ha_linked: int = 0,
 ) -> str:
-    """One Telegram message summarizing several similar alerts."""
-    title = EVENT_TITLES_HE.get(event_type, event_type)
-    count = len(items)
-    if count == 1:
-        description = items[0][1]
-    else:
-        bullet_lines = "\n".join(f"• {desc}" for _, desc in items[:15])
-        suffix = f"\n… ועוד {count - 15}" if count > 15 else ""
-        description = f"{count} אירועים:\n{bullet_lines}{suffix}"
-    return format_alert(
-        event_type,
-        description,
-        active,
-        total,
-        bridge_online=bridge_online,
-        ha_active=ha_active,
-        ha_linked=ha_linked,
+    """One Telegram message summarizing alerts from the digest queue."""
+    lines = [HEADER]
+    lines.append(
+        "סיכום הפעלה (דקה ראשונה)" if startup else "סיכום התראות"
     )
 
+    for event_type in DIGEST_EVENT_ORDER:
+        descs = descriptions_by_type.get(event_type)
+        if not descs:
+            continue
+        title = EVENT_TITLES_HE.get(event_type, event_type)
+        lines.append("")
+        if len(descs) == 1:
+            lines.append(f"• {title}: {descs[0]}")
+            continue
+        lines.append(f"• {title} ({len(descs)}):")
+        for desc in descs[:_MAX_BULLETS_PER_SECTION]:
+            lines.append(f"  - {desc}")
+        if len(descs) > _MAX_BULLETS_PER_SECTION:
+            lines.append(
+                f"  … ועוד {len(descs) - _MAX_BULLETS_PER_SECTION}"
+            )
 
-class AlertCooldown:
-    """Tracks last-sent time per (event_type, subject) to suppress repeats."""
+    for event_type, descs in descriptions_by_type.items():
+        if event_type in DIGEST_EVENT_ORDER:
+            continue
+        title = EVENT_TITLES_HE.get(event_type, event_type)
+        lines.append("")
+        for desc in descs:
+            lines.append(f"• {title}: {desc}")
 
-    def __init__(self, clock=time.monotonic) -> None:
-        self._clock = clock
-        self._last_sent: dict[tuple[str, str], float] = {}
+    lines.append("")
+    lines.append(
+        format_status_block(
+            active,
+            total,
+            bridge_online=bridge_online,
+            ha_active=ha_active,
+            ha_linked=ha_linked,
+        )
+    )
+    return "\n".join(lines)
 
-    def allow(self, event_type: str, subject: str, cooldown_seconds: float) -> bool:
-        """Return True (and start a new window) if enough time passed since the last send."""
-        key = (event_type, subject)
-        now = self._clock()
-        last = self._last_sent.get(key)
-        if last is not None and (now - last) < cooldown_seconds:
-            return False
-        self._last_sent[key] = now
-        return True
+
+def group_descriptions_by_type(
+    items: list[tuple[str, str]],
+) -> dict[str, list[str]]:
+    """Group (event_type, description) pairs preserving order within each type."""
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for event_type, description in items:
+        grouped[event_type].append(description)
+    return dict(grouped)

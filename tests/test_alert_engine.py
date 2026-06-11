@@ -4,45 +4,35 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from typing import Callable
+
 from zigbee_manager.alert_engine import (
     AlertEngine,
+    PendingAlert,
     SuppressReason,
     TelegramAction,
 )
 from zigbee_manager.const import (
     EVENT_BRIDGE_OFFLINE,
     EVENT_DEVICE_HA_MISMATCH,
+    EVENT_DEVICE_JOINED,
     EVENT_DEVICE_UNAVAILABLE,
+    TELEGRAM_DIGEST_INTERVAL_SECONDS,
 )
 
 
-def _engine(minutes_ago: float = 60) -> AlertEngine:
+def _engine(
+    minutes_ago: float = 60,
+    *,
+    clock: Callable[[], float] | None = None,
+) -> AlertEngine:
     started = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
-    return AlertEngine(started_at=started)
+    clk = clock or (lambda: datetime.now(timezone.utc).timestamp())
+    return AlertEngine(started_at=started, clock=clk)
 
 
 def _plan(engine: AlertEngine, event_type: str, subject: str = "0x1"):
-    return engine.plan_telegram(
-        event_type,
-        subject,
-        startup_grace_minutes=10,
-        max_per_hour=1,
-        max_per_day=4,
-        cooldown_seconds=300,
-    )
-
-
-def test_startup_grace_suppresses_ha_mismatch():
-    engine = _engine(minutes_ago=2)
-    plan = _plan(engine, EVENT_DEVICE_HA_MISMATCH)
-    assert plan.action == TelegramAction.SUPPRESS
-    assert plan.reason == SuppressReason.STARTUP_GRACE
-
-
-def test_after_grace_allows_batch_for_unavailable():
-    engine = _engine(minutes_ago=15)
-    plan = _plan(engine, EVENT_DEVICE_UNAVAILABLE)
-    assert plan.action == TelegramAction.BATCH
+    return engine.plan_telegram(event_type, subject)
 
 
 def test_bridge_incident_suppresses_per_device():
@@ -53,45 +43,64 @@ def test_bridge_incident_suppresses_per_device():
     assert plan.reason == SuppressReason.BRIDGE_INCIDENT
 
 
-def test_critical_bypasses_rate_limit():
+def test_critical_bypasses_digest():
     engine = _engine(minutes_ago=15)
-    engine.record_send()
     plan = _plan(engine, EVENT_BRIDGE_OFFLINE, subject="bridge")
     assert plan.action == TelegramAction.SEND_CRITICAL
 
 
-def test_rate_limit_after_one_send():
+def test_non_critical_enqueues():
     engine = _engine(minutes_ago=15)
-    engine.record_send()
     plan = _plan(engine, EVENT_DEVICE_UNAVAILABLE)
-    assert plan.action == TelegramAction.SUPPRESS
-    assert plan.reason == SuppressReason.RATE_LIMIT
+    assert plan.action == TelegramAction.ENQUEUE
 
 
-def test_daily_limit():
-    engine = _engine(minutes_ago=15)
-    now = datetime.now(timezone.utc).timestamp()
-    engine._rate._send_times = [
-        now - 3600 * 2,
-        now - 3600 * 4,
-        now - 3600 * 6,
-        now - 3600 * 8,
-    ]
-    plan = _plan(engine, EVENT_DEVICE_UNAVAILABLE)
-    assert plan.action == TelegramAction.SUPPRESS
-    assert plan.reason == SuppressReason.RATE_LIMIT
+def test_startup_grace_active():
+    engine = _engine(minutes_ago=0.5)
+    assert engine.in_startup_grace()
 
 
 def test_end_startup_grace():
-    engine = _engine(minutes_ago=2)
-    assert engine.in_startup_grace(10)
+    engine = _engine(minutes_ago=0.5)
+    assert engine.in_startup_grace()
     engine.end_startup_grace()
-    assert not engine.in_startup_grace(10)
+    assert not engine.in_startup_grace()
 
 
-def test_suppressed_count_and_take():
+def test_enqueue_dedup_same_subject():
     engine = _engine(minutes_ago=15)
-    engine.record_suppressed(EVENT_DEVICE_UNAVAILABLE, "desc", SuppressReason.RATE_LIMIT)
-    assert engine.peek_suppressed_count() == 1
-    assert engine.take_suppressed_count() == 1
-    assert engine.peek_suppressed_count() == 0
+    engine.enqueue(
+        PendingAlert(EVENT_DEVICE_UNAVAILABLE, "0x1", "first")
+    )
+    engine.enqueue(
+        PendingAlert(EVENT_DEVICE_UNAVAILABLE, "0x1", "second")
+    )
+    assert engine.digest_pending() == 1
+    items = engine.pop_digest()
+    assert len(items) == 1
+    assert items[0].description == "second"
+
+
+def test_global_gate_blocks_until_interval():
+    now = [1_000_000.0]
+    engine = _engine(minutes_ago=15, clock=lambda: now[0])
+    engine.record_send()
+    assert not engine.can_flush_digest()
+    assert engine.seconds_until_flush() == TELEGRAM_DIGEST_INTERVAL_SECONDS
+    now[0] += TELEGRAM_DIGEST_INTERVAL_SECONDS
+    engine.enqueue(PendingAlert(EVENT_DEVICE_JOINED, "0x2", "joined"))
+    assert engine.can_flush_digest()
+
+
+def test_digest_not_flushable_during_startup_grace():
+    engine = _engine(minutes_ago=0.5)
+    engine.enqueue(PendingAlert(EVENT_DEVICE_JOINED, "0x1", "joined"))
+    assert engine.digest_pending() == 1
+    assert not engine.can_flush_digest()
+
+
+def test_multiple_event_types_in_digest():
+    engine = _engine(minutes_ago=15)
+    engine.enqueue(PendingAlert(EVENT_DEVICE_UNAVAILABLE, "0x1", "a"))
+    engine.enqueue(PendingAlert(EVENT_DEVICE_HA_MISMATCH, "0x2", "b"))
+    assert engine.digest_pending() == 2

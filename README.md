@@ -42,7 +42,12 @@ Alert types (each can be toggled in the integration options):
 - Device not found in Home Assistant (MQTT)
 - Z2M / Home Assistant status mismatch
 
-A per-device cooldown (default 5 minutes) prevents alert spam.
+Anti-spam (fixed, not configurable in the UI):
+
+- **1-minute startup grace** — events are collected, then one startup summary is sent.
+- **5-minute digest gate** — at most one combined Telegram message every 5 minutes; events are grouped, not dropped.
+- **Bridge offline/online** — sent immediately (critical).
+- **Bridge incident** — while the bridge is down, per-device unavailable/mismatch alerts are logged only.
 
 ## Requirements
 
@@ -79,7 +84,7 @@ Settings → Devices & Services → Add Integration → **Zigbee Manager**:
 1. **Zigbee2MQTT base topic** — default `zigbee2mqtt`; change it only if you changed `base_topic` in Z2M.
 2. **Telegram chat ID** — the chat that receives alerts (e.g. `-1001234567890`). Leave empty to disable Telegram alerts.
 
-All alert toggles, the silent-hours threshold, and the cooldown can be changed later via the integration's **Configure** dialog.
+All alert toggles and the silent-hours threshold can be changed later via the integration's **Configure** dialog.
 
 ## Development
 

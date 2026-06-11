@@ -12,19 +12,11 @@ from homeassistant.core import callback
 
 from .const import (
     ALERT_TOGGLE_KEYS,
-    CONF_ALERT_MAX_PER_DAY,
-    CONF_ALERT_MAX_PER_HOUR,
     CONF_BASE_TOPIC,
     CONF_SILENT_THRESHOLD_HOURS,
-    CONF_STARTUP_GRACE_MINUTES,
     CONF_TELEGRAM_CHAT_ID,
-    CONF_TELEGRAM_COOLDOWN_MINUTES,
-    DEFAULT_ALERT_MAX_PER_DAY,
-    DEFAULT_ALERT_MAX_PER_HOUR,
     DEFAULT_BASE_TOPIC,
     DEFAULT_SILENT_THRESHOLD_HOURS,
-    DEFAULT_STARTUP_GRACE_MINUTES,
-    DEFAULT_TELEGRAM_COOLDOWN_MINUTES,
     DOMAIN,
     NAME,
 )
@@ -90,12 +82,6 @@ class ZigbeeManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
                 options = {key: True for key in ALERT_TOGGLE_KEYS}
                 options[CONF_SILENT_THRESHOLD_HOURS] = DEFAULT_SILENT_THRESHOLD_HOURS
-                options[CONF_TELEGRAM_COOLDOWN_MINUTES] = (
-                    DEFAULT_TELEGRAM_COOLDOWN_MINUTES
-                )
-                options[CONF_ALERT_MAX_PER_HOUR] = DEFAULT_ALERT_MAX_PER_HOUR
-                options[CONF_ALERT_MAX_PER_DAY] = DEFAULT_ALERT_MAX_PER_DAY
-                options[CONF_STARTUP_GRACE_MINUTES] = DEFAULT_STARTUP_GRACE_MINUTES
                 return self.async_create_entry(title=NAME, data=data, options=options)
 
         return self.async_show_form(
@@ -149,36 +135,6 @@ class ZigbeeManagerOptionsFlow(config_entries.OptionsFlow):
                 ),
             )
         ] = vol.All(vol.Coerce(float), vol.Range(min=1, max=168))
-        schema_dict[
-            vol.Required(
-                CONF_TELEGRAM_COOLDOWN_MINUTES,
-                default=merged.get(
-                    CONF_TELEGRAM_COOLDOWN_MINUTES, DEFAULT_TELEGRAM_COOLDOWN_MINUTES
-                ),
-            )
-        ] = vol.All(vol.Coerce(float), vol.Range(min=0, max=1440))
-        schema_dict[
-            vol.Required(
-                CONF_ALERT_MAX_PER_HOUR,
-                default=merged.get(
-                    CONF_ALERT_MAX_PER_HOUR, DEFAULT_ALERT_MAX_PER_HOUR
-                ),
-            )
-        ] = vol.All(vol.Coerce(int), vol.Range(min=1, max=10))
-        schema_dict[
-            vol.Required(
-                CONF_ALERT_MAX_PER_DAY,
-                default=merged.get(CONF_ALERT_MAX_PER_DAY, DEFAULT_ALERT_MAX_PER_DAY),
-            )
-        ] = vol.All(vol.Coerce(int), vol.Range(min=1, max=20))
-        schema_dict[
-            vol.Required(
-                CONF_STARTUP_GRACE_MINUTES,
-                default=merged.get(
-                    CONF_STARTUP_GRACE_MINUTES, DEFAULT_STARTUP_GRACE_MINUTES
-                ),
-            )
-        ] = vol.All(vol.Coerce(float), vol.Range(min=0, max=60))
 
         return self.async_show_form(
             step_id="init",

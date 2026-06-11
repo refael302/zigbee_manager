@@ -1,14 +1,16 @@
-"""Tests for the Hebrew alert format and the anti-spam cooldown."""
+"""Tests for the Hebrew alert format and digest messages."""
 
 from __future__ import annotations
 
 from zigbee_manager.alert_format import (
-    AlertCooldown,
     format_alert,
+    format_digest_alert,
     format_status_line,
+    group_descriptions_by_type,
 )
 from zigbee_manager.const import (
     EVENT_BRIDGE_OFFLINE,
+    EVENT_DEVICE_HA_MISMATCH,
     EVENT_DEVICE_UNAVAILABLE,
 )
 
@@ -32,33 +34,6 @@ def test_format_alert_structure():
 def test_format_alert_unknown_event_uses_raw_type():
     msg = format_alert("custom_event", "desc", 1, 1)
     assert "התראה: custom_event" in msg
-
-
-def test_cooldown_blocks_repeats():
-    now = [0.0]
-    cd = AlertCooldown(clock=lambda: now[0])
-    assert cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 300)
-    assert not cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 300)
-    now[0] = 299.0
-    assert not cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 300)
-    now[0] = 301.0
-    assert cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 300)
-
-
-def test_cooldown_is_per_event_and_subject():
-    now = [0.0]
-    cd = AlertCooldown(clock=lambda: now[0])
-    assert cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 300)
-    # Different subject and different event are independent
-    assert cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x2", 300)
-    assert cd.allow(EVENT_BRIDGE_OFFLINE, "bridge", 300)
-
-
-def test_cooldown_zero_always_allows():
-    now = [0.0]
-    cd = AlertCooldown(clock=lambda: now[0])
-    assert cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 0)
-    assert cd.allow(EVENT_DEVICE_UNAVAILABLE, "0x1", 0)
 
 
 def test_format_alert_bridge_offline_shows_zero_active():
@@ -88,32 +63,38 @@ def test_format_alert_dual_status():
     assert "(1 מכשירים ב-Z2M לא נמצאו ב-Home Assistant)" in msg
 
 
-def test_format_alert_critical_with_suppressed():
+def test_format_alert_critical():
     msg = format_alert(
         EVENT_BRIDGE_OFFLINE,
         "גשר לא זמין",
         0,
         56,
         critical=True,
-        suppressed_count=5,
     )
     assert "⚠️ אירוע קריטי" in msg
-    assert "סיננה 5 התראות" in msg
-    assert "System log" in msg
 
 
-def test_format_batched_alert_multiple():
-    from zigbee_manager.alert_format import format_batched_alert
-
-    msg = format_batched_alert(
-        EVENT_DEVICE_UNAVAILABLE,
-        [("0x1", "מכשיר a"), ("0x2", "מכשיר b")],
-        10,
-        12,
+def test_format_digest_alert_multiple_sections():
+    grouped = group_descriptions_by_type(
+        [
+            (EVENT_DEVICE_UNAVAILABLE, "מכשיר a"),
+            (EVENT_DEVICE_UNAVAILABLE, "מכשיר b"),
+            (EVENT_DEVICE_HA_MISMATCH, "מכשיר c"),
+        ]
     )
-    assert "2 אירועים" in msg
+    msg = format_digest_alert(grouped, 10, 12)
+    assert "סיכום התראות" in msg
+    assert "מכשיר התנתק מהרשת (2)" in msg
     assert "מכשיר a" in msg
-    assert "מכשיר b" in msg
+    assert "חוסר התאמה" in msg
+
+
+def test_format_digest_startup_title():
+    grouped = group_descriptions_by_type(
+        [(EVENT_DEVICE_UNAVAILABLE, "מכשיר a")]
+    )
+    msg = format_digest_alert(grouped, 10, 12, startup=True)
+    assert "סיכום הפעלה (דקה ראשונה)" in msg
 
 
 def test_format_status_line_bridge_offline_no_devices():

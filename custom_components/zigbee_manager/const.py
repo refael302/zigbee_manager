@@ -34,16 +34,12 @@ ALERT_TOGGLE_KEYS: tuple[str, ...] = (
 
 # Options: tuning
 CONF_SILENT_THRESHOLD_HOURS = "silent_threshold_hours"
-CONF_TELEGRAM_COOLDOWN_MINUTES = "telegram_cooldown_minutes"
-CONF_ALERT_MAX_PER_HOUR = "alert_max_per_hour"
-CONF_ALERT_MAX_PER_DAY = "alert_max_per_day"
-CONF_STARTUP_GRACE_MINUTES = "startup_grace_minutes"
 
 DEFAULT_SILENT_THRESHOLD_HOURS = 24
-DEFAULT_TELEGRAM_COOLDOWN_MINUTES = 5
-DEFAULT_ALERT_MAX_PER_HOUR = 1
-DEFAULT_ALERT_MAX_PER_DAY = 4
-DEFAULT_STARTUP_GRACE_MINUTES = 10
+
+# Fixed anti-spam (not configurable)
+STARTUP_GRACE_MINUTES = 1
+TELEGRAM_DIGEST_INTERVAL_SECONDS = 300
 
 # Event types (internal)
 EVENT_DEVICE_JOINED = "device_joined"
