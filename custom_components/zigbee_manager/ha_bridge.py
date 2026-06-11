@@ -83,7 +83,7 @@ def _mqtt_entity_statuses(
     """Collect MQTT entity disabled/state info (includes disabled entities)."""
     ent_reg = er.async_get(hass)
     entities = er.async_entries_for_device(
-        ent_reg, device_id, include_disabled_entity=True
+        ent_reg, device_id, include_disabled_entities=True
     )
     statuses: list[MqttEntityStatus] = []
     for entry in entities:
@@ -140,7 +140,7 @@ def collect_mqtt_entity_ids(
         if device_id is None:
             continue
         for entry in er.async_entries_for_device(
-            ent_reg, device_id, include_disabled_entity=True
+            ent_reg, device_id, include_disabled_entities=True
         ):
             if entry.platform not in MQTT_PLATFORMS or entry.entity_id in seen:
                 continue
