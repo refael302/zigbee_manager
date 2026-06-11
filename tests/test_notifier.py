@@ -88,6 +88,34 @@ def test_format_alert_dual_status():
     assert "(1 מכשירים ב-Z2M לא נמצאו ב-Home Assistant)" in msg
 
 
+def test_format_alert_critical_with_suppressed():
+    msg = format_alert(
+        EVENT_BRIDGE_OFFLINE,
+        "גשר לא זמין",
+        0,
+        56,
+        critical=True,
+        suppressed_count=5,
+    )
+    assert "⚠️ אירוע קריטי" in msg
+    assert "סיננה 5 התראות" in msg
+    assert "System log" in msg
+
+
+def test_format_batched_alert_multiple():
+    from zigbee_manager.alert_format import format_batched_alert
+
+    msg = format_batched_alert(
+        EVENT_DEVICE_UNAVAILABLE,
+        [("0x1", "מכשיר a"), ("0x2", "מכשיר b")],
+        10,
+        12,
+    )
+    assert "2 אירועים" in msg
+    assert "מכשיר a" in msg
+    assert "מכשיר b" in msg
+
+
 def test_format_status_line_bridge_offline_no_devices():
     assert (
         format_status_line(0, 0, bridge_online=False)

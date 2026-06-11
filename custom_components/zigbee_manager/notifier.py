@@ -6,7 +6,7 @@ import logging
 
 from homeassistant.core import HomeAssistant
 
-from .alert_format import AlertCooldown, format_alert
+from .alert_format import AlertCooldown, format_alert, format_batched_alert
 from .const import (
     CONF_TELEGRAM_CHAT_ID,
     CONF_TELEGRAM_COOLDOWN_MINUTES,
@@ -31,8 +31,8 @@ class TelegramNotifier:
             return {}
         return {**entry.data, **(entry.options or {})}
 
-    def should_send(self, event_type: str, subject: str = "") -> bool:
-        """Check toggle + cooldown without sending. Updates the cooldown clock when True."""
+    def is_enabled(self, event_type: str) -> bool:
+        """Return True when Telegram is configured and the event toggle is on."""
         cfg = self._config()
         chat_id = str(cfg.get(CONF_TELEGRAM_CHAT_ID) or "").strip()
         if not chat_id:
@@ -40,7 +40,14 @@ class TelegramNotifier:
         toggle_key = EVENT_TOGGLE_MAP.get(event_type)
         if toggle_key is not None and not cfg.get(toggle_key, True):
             return False
+        return True
 
+    def should_send(self, event_type: str, subject: str = "") -> bool:
+        """Check toggle + cooldown without sending. Updates the cooldown clock when True."""
+        if not self.is_enabled(event_type):
+            return False
+
+        cfg = self._config()
         try:
             cooldown_min = float(
                 cfg.get(
@@ -61,6 +68,8 @@ class TelegramNotifier:
         bridge_online: bool | None = None,
         ha_active: int = 0,
         ha_linked: int = 0,
+        critical: bool = False,
+        suppressed_count: int = 0,
     ) -> None:
         """Send a formatted alert message to the configured chat."""
         cfg = self._config()
@@ -75,7 +84,39 @@ class TelegramNotifier:
             bridge_online=bridge_online,
             ha_active=ha_active,
             ha_linked=ha_linked,
+            critical=critical,
+            suppressed_count=suppressed_count,
         )
+        await self._async_deliver(chat_id, message)
+
+    async def async_send_batch(
+        self,
+        event_type: str,
+        items: list[tuple[str, str]],
+        active: int,
+        total: int,
+        *,
+        bridge_online: bool | None = None,
+        ha_active: int = 0,
+        ha_linked: int = 0,
+    ) -> None:
+        """Send one message summarizing several similar alerts."""
+        cfg = self._config()
+        chat_id = str(cfg.get(CONF_TELEGRAM_CHAT_ID) or "").strip()
+        if not chat_id or not items:
+            return
+        message = format_batched_alert(
+            event_type,
+            items,
+            active,
+            total,
+            bridge_online=bridge_online,
+            ha_active=ha_active,
+            ha_linked=ha_linked,
+        )
+        await self._async_deliver(chat_id, message)
+
+    async def _async_deliver(self, chat_id: str, message: str) -> None:
         try:
             await self._hass.services.async_call(
                 "telegram_bot",

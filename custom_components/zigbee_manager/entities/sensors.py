@@ -270,5 +270,11 @@ class SystemLogSensor(ZigbeeManagerSensorBase):
             "level": latest.get("level"),
             "timestamp": latest.get("timestamp"),
             "event_type": latest.get("event_type"),
+            "telegram_suppressed_pending": self.coordinator.data.get(
+                "telegram_suppressed_pending", 0
+            ),
+            "startup_grace_active": self.coordinator.data.get(
+                "startup_grace_active", False
+            ),
             "alerts": self.coordinator.log.entries(),
         }

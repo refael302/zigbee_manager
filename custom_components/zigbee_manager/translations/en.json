@@ -39,7 +39,10 @@
           "alert_device_not_in_ha": "Alert: device not found in Home Assistant (MQTT)",
           "alert_device_ha_mismatch": "Alert: Z2M / Home Assistant status mismatch",
           "silent_threshold_hours": "Hours of silence before a device is reported",
-          "telegram_cooldown_minutes": "Minimum minutes between identical alerts"
+          "telegram_cooldown_minutes": "Minimum minutes between identical alerts",
+          "alert_max_per_hour": "Maximum Telegram messages per hour",
+          "alert_max_per_day": "Maximum Telegram messages per day",
+          "startup_grace_minutes": "Startup grace minutes (no alerts after HA boot)"
         }
       }
     },

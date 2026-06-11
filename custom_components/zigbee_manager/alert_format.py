@@ -64,6 +64,8 @@ def format_alert(
     bridge_online: bool | None = None,
     ha_active: int = 0,
     ha_linked: int = 0,
+    critical: bool = False,
+    suppressed_count: int = 0,
 ) -> str:
     """Build the standard Hebrew alert message."""
     title = EVENT_TITLES_HE.get(event_type, event_type)
@@ -76,7 +78,49 @@ def format_alert(
         ha_active=ha_active,
         ha_linked=ha_linked,
     )
-    return f"{HEADER}\nהתראה: {title}\nתיאור: {description}\n{status}"
+    lines = [HEADER]
+    if critical:
+        lines.append("⚠️ אירוע קריטי")
+    lines.extend([f"התראה: {title}", f"תיאור: {description}", status])
+    if suppressed_count > 0:
+        lines.append("")
+        lines.append(
+            f"⛔ המערכת סיננה {suppressed_count} התראות נוספות מאז ההודעה האחרונה."
+        )
+        lines.append(
+            "לבדיקה: חיישן System log של Zigbee Manager (או יומן האינטגרציה)."
+        )
+    return "\n".join(lines)
+
+
+def format_batched_alert(
+    event_type: str,
+    items: list[tuple[str, str]],
+    active: int,
+    total: int,
+    *,
+    bridge_online: bool | None = None,
+    ha_active: int = 0,
+    ha_linked: int = 0,
+) -> str:
+    """One Telegram message summarizing several similar alerts."""
+    title = EVENT_TITLES_HE.get(event_type, event_type)
+    count = len(items)
+    if count == 1:
+        description = items[0][1]
+    else:
+        bullet_lines = "\n".join(f"• {desc}" for _, desc in items[:15])
+        suffix = f"\n… ועוד {count - 15}" if count > 15 else ""
+        description = f"{count} אירועים:\n{bullet_lines}{suffix}"
+    return format_alert(
+        event_type,
+        description,
+        active,
+        total,
+        bridge_online=bridge_online,
+        ha_active=ha_active,
+        ha_linked=ha_linked,
+    )
 
 
 class AlertCooldown:

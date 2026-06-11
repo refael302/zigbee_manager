@@ -13,8 +13,16 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import (
     CONF_ALERT_DEVICE_HA_MISMATCH,
     CONF_ALERT_DEVICE_NOT_IN_HA,
+    CONF_ALERT_MAX_PER_DAY,
+    CONF_ALERT_MAX_PER_HOUR,
     CONF_SILENT_THRESHOLD_HOURS,
+    CONF_STARTUP_GRACE_MINUTES,
+    CONF_TELEGRAM_COOLDOWN_MINUTES,
+    DEFAULT_ALERT_MAX_PER_DAY,
+    DEFAULT_ALERT_MAX_PER_HOUR,
     DEFAULT_SILENT_THRESHOLD_HOURS,
+    DEFAULT_STARTUP_GRACE_MINUTES,
+    DEFAULT_TELEGRAM_COOLDOWN_MINUTES,
     DOMAIN,
     EVENT_BRIDGE_OFFLINE,
     EVENT_BRIDGE_ONLINE,
@@ -27,6 +35,13 @@ from .const import (
     EVENT_DEVICE_UNAVAILABLE,
     EVENT_TITLES_HE,
     UPDATE_INTERVAL_SECONDS,
+)
+from .alert_engine import (
+    BATCH_WINDOW_SECONDS,
+    PendingAlert,
+    SuppressReason,
+    TelegramAction,
+    AlertEngine,
 )
 from .ha_bridge import HaStateTracker, collect_mqtt_entity_ids, refresh_all_ha_status
 from .ha_status import (
@@ -73,6 +88,8 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.bridge_info: dict[str, Any] = {}
         self.log = IntegrationLog()
         self.notifier = TelegramNotifier(hass, entry.entry_id)
+        self._alert_engine = AlertEngine()
+        self._batch_handles: dict[str, Any] = {}
         self._devices_received = False
         self._ha_tracker = HaStateTracker(hass, self._async_on_ha_entities_changed)
         self._device_mismatch: dict[str, str] = {}
@@ -117,6 +134,65 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hours = DEFAULT_SILENT_THRESHOLD_HOURS
         return timedelta(hours=hours)
 
+    def _config(self) -> dict[str, Any]:
+        return {**self.entry.data, **(self.entry.options or {})}
+
+    def _startup_grace_minutes(self) -> float:
+        cfg = self._config()
+        try:
+            return float(
+                cfg.get(CONF_STARTUP_GRACE_MINUTES, DEFAULT_STARTUP_GRACE_MINUTES)
+            )
+        except (TypeError, ValueError):
+            return DEFAULT_STARTUP_GRACE_MINUTES
+
+    def _rate_limits(self) -> tuple[int, int, float]:
+        cfg = self._config()
+        try:
+            max_hour = int(cfg.get(CONF_ALERT_MAX_PER_HOUR, DEFAULT_ALERT_MAX_PER_HOUR))
+        except (TypeError, ValueError):
+            max_hour = DEFAULT_ALERT_MAX_PER_HOUR
+        try:
+            max_day = int(cfg.get(CONF_ALERT_MAX_PER_DAY, DEFAULT_ALERT_MAX_PER_DAY))
+        except (TypeError, ValueError):
+            max_day = DEFAULT_ALERT_MAX_PER_DAY
+        try:
+            cooldown_min = float(
+                cfg.get(
+                    CONF_TELEGRAM_COOLDOWN_MINUTES, DEFAULT_TELEGRAM_COOLDOWN_MINUTES
+                )
+            )
+        except (TypeError, ValueError):
+            cooldown_min = DEFAULT_TELEGRAM_COOLDOWN_MINUTES
+        return max_hour, max_day, cooldown_min * 60
+
+    def async_schedule_startup_finalizer(self) -> None:
+        """After startup grace, sync HA mismatch baseline without flooding Telegram."""
+        grace = self._startup_grace_minutes()
+        if grace <= 0:
+            self._alert_engine.end_startup_grace()
+            return
+
+        def _on_grace_end(_now: datetime) -> None:
+            self.hass.async_create_task(self._async_on_startup_grace_end())
+
+        self.hass.helpers.event.async_track_point_in_time(
+            _on_grace_end,
+            datetime.now(timezone.utc) + timedelta(minutes=grace),
+        )
+
+    async def _async_on_startup_grace_end(self) -> None:
+        self._alert_engine.end_startup_grace()
+        self._device_mismatch = {
+            ieee: classify_ha_mismatch(dev, self.bridge_online)
+            for ieee, dev in self.devices.items()
+        }
+        self.log.add(
+            "תקופת חסד בהפעלה הסתיימה — סנכרון בסיס חוסר התאמה HA",
+            level="info",
+        )
+        self.async_set_updated_data(self._snapshot())
+
     async def _emit(
         self,
         event_type: str,
@@ -129,18 +205,133 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Record an alert in the log and (optionally) send it to Telegram."""
         title = EVENT_TITLES_HE.get(event_type, event_type)
         self.log.add(f"{title} — {description}", level=level, event_type=event_type)
-        if notify and self.notifier.should_send(event_type, subject):
-            ha_active, ha_linked = self._ha_status_counts()
-            await self.notifier.async_send(
-                event_type,
-                description,
-                self.active_devices,
-                self.total_devices,
-                bridge_online=self.bridge_online,
-                ha_active=ha_active,
-                ha_linked=ha_linked,
-            )
+        if notify:
+            await self._maybe_send_telegram(event_type, description, subject=subject)
         self.async_set_updated_data(self._snapshot())
+
+    async def _maybe_send_telegram(
+        self, event_type: str, description: str, *, subject: str
+    ) -> None:
+        if not self.notifier.is_enabled(event_type):
+            return
+
+        max_hour, max_day, cooldown_sec = self._rate_limits()
+        plan = self._alert_engine.plan_telegram(
+            event_type,
+            subject,
+            startup_grace_minutes=self._startup_grace_minutes(),
+            max_per_hour=max_hour,
+            max_per_day=max_day,
+            cooldown_seconds=cooldown_sec,
+        )
+
+        if plan.action == TelegramAction.SUPPRESS:
+            self._alert_engine.record_suppressed(
+                event_type, description, plan.reason
+            )
+            self._log_suppressed(event_type, description, plan.reason)
+            return
+
+        if plan.action == TelegramAction.BATCH:
+            await self._enqueue_batch(
+                PendingAlert(event_type, subject, description)
+            )
+            return
+
+        await self._deliver_telegram(
+            event_type,
+            description,
+            critical=plan.action == TelegramAction.SEND_CRITICAL,
+        )
+
+    def _log_suppressed(
+        self, event_type: str, description: str, reason: SuppressReason
+    ) -> None:
+        reason_he = {
+            SuppressReason.STARTUP_GRACE: "הפעלת HA",
+            SuppressReason.BRIDGE_INCIDENT: "גשר לא זמין",
+            SuppressReason.RATE_LIMIT: "מגבלת קצב",
+            SuppressReason.COOLDOWN: "cooldown",
+        }.get(reason, "סינון")
+        self.log.add(
+            f"Telegram נדחה ({reason_he}): {description}",
+            level="debug",
+            event_type=event_type,
+        )
+
+    async def _enqueue_batch(self, alert: PendingAlert) -> None:
+        self._alert_engine.add_to_batch(alert)
+        if alert.event_type not in self._batch_handles:
+
+            def _flush(_now: datetime) -> None:
+                self.hass.async_create_task(
+                    self._async_flush_batch(alert.event_type)
+                )
+
+            self._batch_handles[alert.event_type] = (
+                self.hass.helpers.event.async_track_point_in_time(
+                    _flush,
+                    datetime.now(timezone.utc)
+                    + timedelta(seconds=BATCH_WINDOW_SECONDS),
+                )
+            )
+
+    async def _async_flush_batch(self, event_type: str) -> None:
+        self._batch_handles.pop(event_type, None)
+        items = self._alert_engine.pop_batch(event_type)
+        if not items:
+            return
+
+        max_hour, max_day, cooldown_sec = self._rate_limits()
+        if not self._alert_engine.can_send_non_critical(
+            max_per_hour=max_hour, max_per_day=max_day
+        ):
+            for item in items:
+                self._alert_engine.record_suppressed(
+                    item.event_type, item.description, SuppressReason.RATE_LIMIT
+                )
+                self._log_suppressed(
+                    item.event_type, item.description, SuppressReason.RATE_LIMIT
+                )
+            return
+
+        ha_active, ha_linked = self._ha_status_counts()
+        await self.notifier.async_send_batch(
+            event_type,
+            [(i.subject, i.description) for i in items],
+            self.active_devices,
+            self.total_devices,
+            bridge_online=self.bridge_online,
+            ha_active=ha_active,
+            ha_linked=ha_linked,
+        )
+        self._alert_engine.record_send()
+        for item in items:
+            self._alert_engine.mark_cooldown(
+                item.event_type, item.subject, cooldown_sec
+            )
+
+    async def _deliver_telegram(
+        self,
+        event_type: str,
+        description: str,
+        *,
+        critical: bool = False,
+    ) -> None:
+        suppressed = self._alert_engine.take_suppressed_count()
+        ha_active, ha_linked = self._ha_status_counts()
+        await self.notifier.async_send(
+            event_type,
+            description,
+            self.active_devices,
+            self.total_devices,
+            bridge_online=self.bridge_online,
+            ha_active=ha_active,
+            ha_linked=ha_linked,
+            critical=critical,
+            suppressed_count=suppressed,
+        )
+        self._alert_engine.record_send()
 
     def _ha_context_suffix(self, dev: DeviceState) -> str:
         if not dev.ha_linked:
@@ -158,6 +349,10 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "ha_linked": ha_linked,
             "bridge_online": self.bridge_online,
             "last_log": self.log.latest,
+            "telegram_suppressed_pending": self._alert_engine.peek_suppressed_count(),
+            "startup_grace_active": self._alert_engine.in_startup_grace(
+                self._startup_grace_minutes()
+            ),
         }
 
     async def _async_refresh_ha_status(self) -> None:
@@ -181,6 +376,10 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not self._ha_mismatch_initialized:
             self._device_mismatch = current
             self._ha_mismatch_initialized = True
+            return
+
+        if self._alert_engine.in_startup_grace(self._startup_grace_minutes()):
+            self._device_mismatch = current
             return
 
         cfg = {**self.entry.data, **(self.entry.options or {})}
@@ -232,12 +431,14 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.bridge_start_estimated = True
             if not online:
                 mark_all_offline(self.devices)
+                self._alert_engine.set_bridge_incident(True)
             self.async_set_updated_data(self._snapshot())
             return
 
         if online and not previous:
             self.bridge_started_at = datetime.now(timezone.utc)
             self.bridge_start_estimated = False
+            self._alert_engine.set_bridge_incident(False)
             await self._emit(
                 EVENT_BRIDGE_ONLINE,
                 "גשר ה-Zigbee2MQTT חזר לפעילות",
@@ -245,6 +446,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         elif not online and previous:
             mark_all_offline(self.devices)
+            self._alert_engine.set_bridge_incident(True)
             await self._emit(
                 EVENT_BRIDGE_OFFLINE,
                 "גשר ה-Zigbee2MQTT הפסיק להגיב — רשת הזיגבי אינה זמינה",
