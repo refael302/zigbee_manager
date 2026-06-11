@@ -247,7 +247,7 @@ class BridgeUptimeSensor(ZigbeeManagerSensorBase):
 
 
 class SystemLogSensor(ZigbeeManagerSensorBase):
-    """Latest alert / bridge log line, with recent history in attributes."""
+    """Latest integration alert line, with recent history in attributes."""
 
     def __init__(
         self, coordinator: ZigbeeManagerCoordinator, entry: ConfigEntry

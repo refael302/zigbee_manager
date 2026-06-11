@@ -31,17 +31,8 @@ def test_ring_buffer_caps_size():
     assert entries[0]["message"] == "msg9"
 
 
-def test_add_bridge_log():
+def test_entries_are_integration_only():
     log = IntegrationLog()
-    rec = log.add_bridge_log(
-        {"level": "info", "message": "Zigbee: allowing new devices to join.", "namespace": "z2m"}
-    )
-    assert rec is not None
-    assert rec["source"] == "z2m"
-    assert log.latest["message"].startswith("Zigbee:")
-
-
-def test_add_bridge_log_without_message_ignored():
-    log = IntegrationLog()
-    assert log.add_bridge_log({"level": "info"}) is None
-    assert log.latest is None
+    log.add("alert", event_type="device_joined")
+    for entry in log.entries():
+        assert entry["source"] == "zigbee_manager"

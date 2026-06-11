@@ -56,10 +56,6 @@ async def async_subscribe_z2m(
         _task(coordinator.async_handle_bridge_info(_decode(msg.payload)))
 
     @callback
-    def on_bridge_logging(msg: mqtt.ReceiveMessage) -> None:
-        _task(coordinator.async_handle_bridge_logging(_decode(msg.payload)))
-
-    @callback
     def on_availability(msg: mqtt.ReceiveMessage) -> None:
         # topic: {base}/FRIENDLY_NAME/availability — friendly names may contain '/'
         topic = msg.topic
@@ -81,7 +77,6 @@ async def async_subscribe_z2m(
         (f"{base}/bridge/devices", on_bridge_devices),
         (f"{base}/bridge/event", on_bridge_event),
         (f"{base}/bridge/info", on_bridge_info),
-        (f"{base}/bridge/logging", on_bridge_logging),
         (f"{base}/+/availability", on_availability),
         (f"{base}/+", on_device_message),
     ]

@@ -81,7 +81,7 @@ EVENT_TITLES_HE: dict[str, str] = {
     EVENT_DEVICE_HA_MISMATCH: "חוסר התאמה Z2M / Home Assistant",
 }
 
-# System log ring buffer
+# Integration log ring buffer (alerts and internal events only)
 LOG_BUFFER_MAX = 50
 LOG_STATE_MAX_LEN = 255
 

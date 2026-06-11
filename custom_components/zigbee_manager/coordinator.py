@@ -524,15 +524,6 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
         self.async_set_updated_data(self._snapshot())
 
-    async def async_handle_bridge_logging(self, payload: Any) -> None:
-        """`{base}/bridge/logging` — {"level", "message", "namespace"}."""
-        if not isinstance(payload, dict):
-            return
-        if str(payload.get("level")) == "debug":
-            return
-        if self.log.add_bridge_log(payload):
-            self.async_set_updated_data(self._snapshot())
-
     async def async_handle_availability(self, friendly_name: str, payload: Any) -> None:
         """`{base}/FRIENDLY_NAME/availability` — {"state": "online"|"offline"} or plain text."""
         state = payload.get("state") if isinstance(payload, dict) else payload
