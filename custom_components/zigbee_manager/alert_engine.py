@@ -13,13 +13,14 @@ from .const import (
     EVENT_DEVICE_HA_MISMATCH,
     EVENT_DEVICE_NOT_IN_HA,
     EVENT_DEVICE_UNAVAILABLE,
+    EVENT_NETWORK_STALE,
     STARTUP_GRACE_MINUTES,
     TELEGRAM_DIGEST_INTERVAL_SECONDS,
 )
 
 # Always delivered immediately (subject to toggle + chat ID).
 CRITICAL_EVENTS: frozenset[str] = frozenset(
-    {EVENT_BRIDGE_OFFLINE, EVENT_BRIDGE_ONLINE}
+    {EVENT_BRIDGE_OFFLINE, EVENT_BRIDGE_ONLINE, EVENT_NETWORK_STALE}
 )
 
 # Per-device alerts while the bridge is down (one bridge alert is enough).

@@ -38,6 +38,7 @@
           "alert_bridge_online": "Alert: Zigbee network recovered",
           "alert_device_not_in_ha": "Alert: device not found in Home Assistant (MQTT)",
           "alert_device_ha_mismatch": "Alert: Z2M / Home Assistant status mismatch",
+          "alert_network_stale": "Alert: no MQTT from any device (network stale)",
           "silent_threshold_hours": "Hours of silence before a device is reported"
         }
       }
@@ -50,6 +51,11 @@
     "button": {
       "reset_device_snapshot": {
         "name": "Reset device snapshot"
+      }
+    },
+    "sensor": {
+      "system_status": {
+        "name": "System status"
       }
     }
   }

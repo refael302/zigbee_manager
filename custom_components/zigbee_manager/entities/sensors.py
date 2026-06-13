@@ -28,6 +28,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             TotalDevicesSensor(coordinator, entry),
+            SystemStatusSensor(coordinator, entry),
             ActiveDevicesSensor(coordinator, entry),
             ActiveDevicesHaSensor(coordinator, entry),
             DeviceRegistrySensor(coordinator, entry),
@@ -84,6 +85,42 @@ class TotalDevicesSensor(ZigbeeManagerSensorBase):
         return {
             "bridge_online": self.coordinator.bridge_online,
             "z2m_version": self.coordinator.bridge_info.get("version"),
+        }
+
+
+class SystemStatusSensor(ZigbeeManagerSensorBase):
+    """Overall Zigbee network health (bridge + device MQTT activity)."""
+
+    def __init__(
+        self, coordinator: ZigbeeManagerCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(
+            coordinator,
+            entry,
+            "system_status",
+            "System status",
+            "mdi:heart-pulse",
+        )
+        self._attr_translation_key = "system_status"
+
+    @property
+    def native_value(self) -> str:
+        return str(
+            self.coordinator.data.get("system_status_label") or "ממתין"
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self.coordinator.data
+        return {
+            "status": data.get("system_status"),
+            "bridge_online": data.get("bridge_online"),
+            "startup_grace_active": data.get("startup_grace_active"),
+            "last_device_activity_at": data.get("last_device_activity_at"),
+            "seconds_since_device_activity": data.get(
+                "seconds_since_device_activity"
+            ),
+            "network_stale_minutes": 10,
         }
 
 

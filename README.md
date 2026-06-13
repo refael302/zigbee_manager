@@ -9,6 +9,7 @@ This integration is a monitoring and alerting layer. It does not create device e
 | Entity | State | Notable attributes |
 |--------|-------|--------------------|
 | `sensor.zigbee_manager_total_devices` | Number of devices in the network (excluding the coordinator) | `bridge_online`, `z2m_version` |
+| `sensor.zigbee_manager_system_status` | Overall health (`תקין`, `גשר לא זמין`, `אין תקשורת ממכשירים`, …) | `status`, `last_device_activity_at`, `seconds_since_device_activity` |
 | `sensor.zigbee_manager_active_devices` | Devices active per Z2M (MQTT availability) | `total`, `offline_devices`, `ha_active`, `ha_linked` |
 | `sensor.zigbee_manager_active_devices_ha` | Devices with available MQTT entities in HA | `not_linked_in_ha`, `ha_inactive_devices`, `mismatch_devices` |
 | `sensor.zigbee_manager_device_registry` | Device count | `devices` — per-device dict: IEEE, vendor, model, type, availability, `last_seen`, interview state |
@@ -59,6 +60,7 @@ Anti-spam (fixed, not configurable in the UI):
 - **1-minute startup grace** — events are collected, then one startup summary is sent.
 - **5-minute digest gate** — at most one combined Telegram message every 5 minutes; events are grouped, not dropped.
 - **Bridge offline/online** — sent immediately (critical).
+- **Network stale** — no MQTT from any device for **10 minutes** while bridge reports online → immediate critical alert.
 - **Bridge incident** — while the bridge is down, per-device unavailable/mismatch alerts are logged only.
 
 ## Requirements

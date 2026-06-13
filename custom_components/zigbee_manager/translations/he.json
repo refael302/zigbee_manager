@@ -38,6 +38,7 @@
           "alert_bridge_online": "התראה: רשת זיגבי חזרה",
           "alert_device_not_in_ha": "התראה: מכשיר לא נמצא ב-Home Assistant (MQTT)",
           "alert_device_ha_mismatch": "התראה: חוסר התאמה בין Z2M ל-Home Assistant",
+          "alert_network_stale": "התראה: אין MQTT ממכשירים (רשת קפואה)",
           "silent_threshold_hours": "שעות שקט לפני דיווח על מכשיר"
         }
       }
@@ -50,6 +51,11 @@
     "button": {
       "reset_device_snapshot": {
         "name": "איפוס רשימת בסיס מכשירים"
+      }
+    },
+    "sensor": {
+      "system_status": {
+        "name": "סטטוס מערכת"
       }
     }
   }

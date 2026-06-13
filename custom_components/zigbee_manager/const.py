@@ -20,6 +20,7 @@ CONF_ALERT_BRIDGE_OFFLINE = "alert_bridge_offline"
 CONF_ALERT_BRIDGE_ONLINE = "alert_bridge_online"
 CONF_ALERT_DEVICE_NOT_IN_HA = "alert_device_not_in_ha"
 CONF_ALERT_DEVICE_HA_MISMATCH = "alert_device_ha_mismatch"
+CONF_ALERT_NETWORK_STALE = "alert_network_stale"
 
 ALERT_TOGGLE_KEYS: tuple[str, ...] = (
     CONF_ALERT_DEVICE_JOINED,
@@ -30,16 +31,18 @@ ALERT_TOGGLE_KEYS: tuple[str, ...] = (
     CONF_ALERT_BRIDGE_ONLINE,
     CONF_ALERT_DEVICE_NOT_IN_HA,
     CONF_ALERT_DEVICE_HA_MISMATCH,
+    CONF_ALERT_NETWORK_STALE,
 )
 
 # Options: tuning
 CONF_SILENT_THRESHOLD_HOURS = "silent_threshold_hours"
 
-DEFAULT_SILENT_THRESHOLD_HOURS = 24
+DEFAULT_SILENT_THRESHOLD_HOURS = 3
 
 # Fixed anti-spam (not configurable)
 STARTUP_GRACE_MINUTES = 1
 TELEGRAM_DIGEST_INTERVAL_SECONDS = 300
+NETWORK_ACTIVITY_TIMEOUT_MINUTES = 10
 
 # Event types (internal)
 EVENT_DEVICE_JOINED = "device_joined"
@@ -52,6 +55,7 @@ EVENT_BRIDGE_OFFLINE = "bridge_offline"
 EVENT_BRIDGE_ONLINE = "bridge_online"
 EVENT_DEVICE_NOT_IN_HA = "device_not_in_ha"
 EVENT_DEVICE_HA_MISMATCH = "device_ha_mismatch"
+EVENT_NETWORK_STALE = "network_stale"
 
 # Map event type -> options toggle key that controls its Telegram alert
 EVENT_TOGGLE_MAP: dict[str, str] = {
@@ -64,6 +68,7 @@ EVENT_TOGGLE_MAP: dict[str, str] = {
     EVENT_BRIDGE_ONLINE: CONF_ALERT_BRIDGE_ONLINE,
     EVENT_DEVICE_NOT_IN_HA: CONF_ALERT_DEVICE_NOT_IN_HA,
     EVENT_DEVICE_HA_MISMATCH: CONF_ALERT_DEVICE_HA_MISMATCH,
+    EVENT_NETWORK_STALE: CONF_ALERT_NETWORK_STALE,
 }
 
 # Hebrew alert titles per event type
@@ -71,13 +76,14 @@ EVENT_TITLES_HE: dict[str, str] = {
     EVENT_DEVICE_JOINED: "מכשיר הצטרף לרשת",
     EVENT_DEVICE_UNAVAILABLE: "מכשיר התנתק מהרשת",
     EVENT_DEVICE_AVAILABLE: "מכשיר חזר לרשת",
-    EVENT_DEVICE_SILENT: "מכשיר לא תקשר מעל 24 שעות",
+    EVENT_DEVICE_SILENT: "מכשיר לא תקשר זמן רב",
     EVENT_DEVICE_REMOVED: "מכשיר נמחק מהרשת",
     EVENT_DEVICE_VANISHED: "מכשיר נעלם מהרשת (השוואה להפעלה קודמת)",
     EVENT_BRIDGE_OFFLINE: "רשת זיגבי נפלה",
     EVENT_BRIDGE_ONLINE: "רשת זיגבי חזרה לפעילות",
     EVENT_DEVICE_NOT_IN_HA: "מכשיר לא נמצא ב-Home Assistant",
     EVENT_DEVICE_HA_MISMATCH: "חוסר התאמה Z2M / Home Assistant",
+    EVENT_NETWORK_STALE: "אין תקשורת MQTT ממכשירים",
 }
 
 # Integration log ring buffer (alerts and internal events only)

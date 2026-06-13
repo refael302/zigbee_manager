@@ -28,10 +28,13 @@ from .const import (
     EVENT_DEVICE_VANISHED,
     EVENT_DEVICE_SILENT,
     EVENT_DEVICE_UNAVAILABLE,
+    EVENT_NETWORK_STALE,
     EVENT_TITLES_HE,
+    NETWORK_ACTIVITY_TIMEOUT_MINUTES,
     STARTUP_GRACE_MINUTES,
     UPDATE_INTERVAL_SECONDS,
 )
+from .system_status import compute_system_status, system_status_label
 from .alert_engine import (
     PendingAlert,
     SuppressReason,
@@ -97,6 +100,59 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._ha_mismatch_initialized = False
         self._device_snapshot = DeviceSnapshotStore(hass, entry.entry_id)
         self._vanished_startup_check_done = False
+        self._last_device_activity_at: datetime | None = None
+        self._network_stale_alerted = False
+
+    def _network_activity_timeout(self) -> timedelta:
+        return timedelta(minutes=NETWORK_ACTIVITY_TIMEOUT_MINUTES)
+
+    def _touch_device_activity(self) -> None:
+        """Record MQTT traffic from a Zigbee device (state or availability)."""
+        now = datetime.now(timezone.utc)
+        was_stale = self._network_stale_alerted
+        self._last_device_activity_at = now
+        if was_stale:
+            self._network_stale_alerted = False
+            self.log.add("תקשורת MQTT ממכשירים חזרה", level="info")
+
+    def _system_status_fields(self) -> tuple[str, str, dict[str, Any]]:
+        now = datetime.now(timezone.utc)
+        status_key, details = compute_system_status(
+            bridge_online=self.bridge_online,
+            startup_grace=self._alert_engine.in_startup_grace(),
+            devices_received=self._devices_received,
+            last_device_activity_at=self._last_device_activity_at,
+            stale_after=self._network_activity_timeout(),
+            now=now,
+        )
+        return status_key, system_status_label(status_key, details), details
+
+    async def _async_check_network_stale(self) -> None:
+        """Alert when the bridge looks online but no device MQTT arrived recently."""
+        if self._alert_engine.in_startup_grace():
+            return
+        if self.bridge_online is not True:
+            return
+        if not self._devices_received:
+            return
+        if self._last_device_activity_at is None:
+            return
+        if self._network_stale_alerted:
+            return
+
+        idle = datetime.now(timezone.utc) - self._last_device_activity_at
+        if idle <= self._network_activity_timeout():
+            return
+
+        minutes = NETWORK_ACTIVITY_TIMEOUT_MINUTES
+        self._network_stale_alerted = True
+        await self._emit(
+            EVENT_NETWORK_STALE,
+            f"לא התקבלה הודעת MQTT מאף מכשיר ב-{minutes} דקות האחרונות "
+            f"(גשר מדווח online — ייתכן קיפאון Z2M)",
+            subject="network",
+            level="error",
+        )
 
     async def async_load_device_snapshot(self) -> None:
         """Load persisted device baseline from disk."""
@@ -375,6 +431,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _snapshot(self) -> dict[str, Any]:
         ha_active, ha_linked = self._ha_status_counts()
+        status_key, status_label, status_details = self._system_status_fields()
         return {
             "total": self.total_devices,
             "active": self.active_devices,
@@ -385,6 +442,9 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "telegram_digest_pending": self._alert_engine.digest_pending(),
             "startup_grace_active": self._alert_engine.in_startup_grace(),
             "device_snapshot_baseline": self._device_snapshot.baseline_count,
+            "system_status": status_key,
+            "system_status_label": status_label,
+            **status_details,
         }
 
     async def _async_refresh_ha_status(self) -> None:
@@ -471,6 +531,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.bridge_started_at = datetime.now(timezone.utc)
             self.bridge_start_estimated = False
             self._alert_engine.set_bridge_incident(False)
+            self._network_stale_alerted = False
             await self._emit(
                 EVENT_BRIDGE_ONLINE,
                 "גשר ה-Zigbee2MQTT חזר לפעילות",
@@ -479,6 +540,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elif not online and previous:
             mark_all_offline(self.devices)
             self._alert_engine.set_bridge_incident(True)
+            self._network_stale_alerted = False
             await self._emit(
                 EVENT_BRIDGE_OFFLINE,
                 "גשר ה-Zigbee2MQTT הפסיק להגיב — רשת הזיגבי אינה זמינה",
@@ -571,6 +633,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         dev = self._device_by_name(friendly_name)
         if dev is None:
             return
+        self._touch_device_activity()
         previous = dev.availability
         dev.availability = state
 
@@ -601,6 +664,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         dev = self._device_by_name(friendly_name)
         if dev is None:
             return
+        self._touch_device_activity()
         last_seen = None
         if isinstance(payload, dict):
             last_seen = parse_last_seen(payload.get("last_seen"))
@@ -614,6 +678,8 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         threshold = self._silent_threshold()
         now = datetime.now(timezone.utc)
         hours = int(threshold.total_seconds() // 3600)
+        if hours < 1:
+            hours = round(threshold.total_seconds() / 3600, 1)
         for dev in self.devices.values():
             if dev.disabled or dev.silent_alerted or dev.last_seen is None:
                 continue
@@ -627,5 +693,6 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     subject=dev.ieee_address,
                     level="warning",
                 )
+        await self._async_check_network_stale()
         await self._async_refresh_ha_status()
         return self._snapshot()

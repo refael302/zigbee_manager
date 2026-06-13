@@ -17,6 +17,7 @@ from zigbee_manager.const import (
     EVENT_DEVICE_HA_MISMATCH,
     EVENT_DEVICE_JOINED,
     EVENT_DEVICE_UNAVAILABLE,
+    EVENT_NETWORK_STALE,
     TELEGRAM_DIGEST_INTERVAL_SECONDS,
 )
 
@@ -46,6 +47,13 @@ def test_bridge_incident_suppresses_per_device():
 def test_critical_bypasses_digest():
     engine = _engine(minutes_ago=15)
     plan = _plan(engine, EVENT_BRIDGE_OFFLINE, subject="bridge")
+    assert plan.action == TelegramAction.SEND_CRITICAL
+
+
+def test_network_stale_is_critical():
+    engine = _engine(minutes_ago=15)
+    engine.record_send()
+    plan = _plan(engine, EVENT_NETWORK_STALE, subject="network")
     assert plan.action == TelegramAction.SEND_CRITICAL
 
 
