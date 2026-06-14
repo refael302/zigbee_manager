@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -102,6 +103,7 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._vanished_startup_check_done = False
         self._last_device_activity_at: datetime | None = None
         self._network_stale_alerted = False
+        self._digest_flush_lock = asyncio.Lock()
 
     def _network_activity_timeout(self) -> timedelta:
         return timedelta(minutes=NETWORK_ACTIVITY_TIMEOUT_MINUTES)
@@ -378,26 +380,27 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_flush_digest(
         self, *, startup: bool = False, force: bool = False
     ) -> None:
-        self._cancel_digest_flush_timer()
-        if not force and not self._alert_engine.can_flush_digest():
-            await self._schedule_digest_flush()
-            return
+        async with self._digest_flush_lock:
+            self._cancel_digest_flush_timer()
+            if not force and not self._alert_engine.can_flush_digest():
+                await self._schedule_digest_flush()
+                return
 
-        items = self._alert_engine.pop_digest()
-        if not items:
-            return
+            items = self._alert_engine.pop_digest()
+            if not items:
+                return
 
-        ha_active, ha_linked = self._ha_status_counts()
-        await self.notifier.async_send_digest(
-            items,
-            self.active_devices,
-            self.total_devices,
-            startup=startup,
-            bridge_online=self.bridge_online,
-            ha_active=ha_active,
-            ha_linked=ha_linked,
-        )
-        self._alert_engine.record_send()
+            self._alert_engine.record_send()
+            ha_active, ha_linked = self._ha_status_counts()
+            await self.notifier.async_send_digest(
+                items,
+                self.active_devices,
+                self.total_devices,
+                startup=startup,
+                bridge_online=self.bridge_online,
+                ha_active=ha_active,
+                ha_linked=ha_linked,
+            )
 
     async def _deliver_telegram(
         self,
@@ -588,28 +591,10 @@ class ZigbeeManagerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """`{base}/bridge/event` — device_joined / device_leave / device_announce."""
         if not isinstance(payload, dict):
             return
-        event_type = payload.get("type")
-        data = payload.get("data") or {}
-        name = data.get("friendly_name") or data.get("ieee_address") or "?"
-        ieee = data.get("ieee_address") or name
-
-        if event_type == "device_joined":
-            await self._emit(
-                EVENT_DEVICE_JOINED,
-                f"מכשיר {name} ({ieee}) הצטרף לרשת",
-                subject=ieee,
-            )
-            await self._async_persist_snapshot_add(ieee, name)
-        elif event_type == "device_leave":
-            self.devices.pop(ieee, None)
-            self._device_mismatch.pop(ieee, None)
-            await self._emit(
-                EVENT_DEVICE_REMOVED,
-                f"מכשיר {name} ({ieee}) נמחק מהרשת",
-                subject=ieee,
-                level="warning",
-            )
-            await self._async_persist_snapshot_remove(ieee)
+        # Join/leave alerts and registry updates are handled via bridge/devices
+        # to avoid duplicate Telegram digests (Z2M publishes both topics).
+        if payload.get("type") in ("device_joined", "device_leave"):
+            return
 
     async def async_handle_bridge_info(self, payload: Any) -> None:
         """`{base}/bridge/info` — version, coordinator type, network settings (retained)."""
